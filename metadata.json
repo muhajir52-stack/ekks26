@@ -1,0 +1,8 @@
+{
+  "name": "SMA Darul Ulum Kepohbaru",
+  "description": "Sistem Informasi Manajemen Sekolah Terintegrasi SMA Darul Ulum Kepohbaru, Bojonegoro: Web Profil Sekolah, Akademik, Absensi & Notifikasi Orang Tua, Arsip Digital, dan Supervisi Digital.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

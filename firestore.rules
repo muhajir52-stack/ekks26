@@ -1,0 +1,728 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 1. Reusable Hardened Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrappedAdmin() {
+      return isEmailVerified() && request.auth.token.email == 'muhajir52@guru.sma.belajar.id';
+    }
+
+    function userDocExists() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function currentUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isActiveUser() {
+      return userDocExists() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.activeStatus == 'aktif';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (isEmailVerified() && isActiveUser() && currentUserRole() == 'super_admin');
+    }
+
+    function isPrincipal() {
+      return isAdmin() || (isEmailVerified() && isActiveUser() && currentUserRole() == 'kepala_sekolah');
+    }
+
+    function isStaffOrAdmin() {
+      return isAdmin() || (isEmailVerified() && isActiveUser() && currentUserRole() in ['kepala_sekolah', 'tendik']);
+    }
+
+    function isSchoolEducator() {
+      return isAdmin() || (isEmailVerified() && isActiveUser() && currentUserRole() in ['kepala_sekolah', 'guru', 'tendik', 'supervisor', 'wali_kelas']);
+    }
+
+    function isSupervisor() {
+      return isAdmin() || (isEmailVerified() && isActiveUser() && currentUserRole() in ['kepala_sekolah', 'supervisor']);
+    }
+
+    function isTeacherOrHomeroom() {
+      return isAdmin() || (isEmailVerified() && isActiveUser() && currentUserRole() in ['kepala_sekolah', 'guru', 'wali_kelas']);
+    }
+
+    function isBoundedString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    // 2. Entity Validation Blueprints
+    function isValidUserAccount(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'activeStatus', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'activeStatus', 'linkedClassId', 'linkedStudentIds', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && isBoundedString(data.email, 3, 180)
+        && isBoundedString(data.displayName, 1, 120)
+        && data.role in ['super_admin', 'kepala_sekolah', 'guru', 'tendik', 'supervisor', 'wali_kelas', 'orang_tua']
+        && data.activeStatus in ['aktif', 'nonaktif']
+        && (!data.keys().hasAny(['linkedClassId']) || isBoundedString(data.linkedClassId, 0, 128))
+        && (!data.keys().hasAny(['linkedStudentIds']) || (data.linkedStudentIds is list && data.linkedStudentIds.size() <= 10))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSchoolContent(data) {
+      return data.keys().hasAll(['sectionKey', 'title', 'body', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['sectionKey', 'title', 'subtitle', 'body', 'items', 'updatedByUid', 'createdAt', 'updatedAt'])
+        && isBoundedString(data.sectionKey, 1, 64)
+        && isBoundedString(data.title, 1, 200)
+        && (!data.keys().hasAny(['subtitle']) || isBoundedString(data.subtitle, 0, 300))
+        && isBoundedString(data.body, 1, 20000)
+        && (!data.keys().hasAny(['items']) || (data.items is list && data.items.size() <= 30))
+        && isValidId(data.updatedByUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidNewsArticle(data) {
+      return data.keys().hasAll(['title', 'category', 'summary', 'content', 'publishedDate', 'authorName', 'isPublished', 'authorUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['title', 'category', 'summary', 'content', 'imageUrl', 'publishedDate', 'authorName', 'isPublished', 'authorUid', 'createdAt', 'updatedAt'])
+        && isBoundedString(data.title, 1, 200)
+        && isBoundedString(data.category, 1, 60)
+        && isBoundedString(data.summary, 1, 500)
+        && isBoundedString(data.content, 1, 15000)
+        && (!data.keys().hasAny(['imageUrl']) || isBoundedString(data.imageUrl, 0, 450000))
+        && isBoundedString(data.publishedDate, 4, 20)
+        && isBoundedString(data.authorName, 1, 120)
+        && data.isPublished is bool
+        && isValidId(data.authorUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAnnouncement(data) {
+      return data.keys().hasAll(['title', 'content', 'audience', 'priority', 'publishedDate', 'authorUid', 'authorName', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['title', 'content', 'audience', 'priority', 'publishedDate', 'authorUid', 'authorName', 'createdAt', 'updatedAt'])
+        && isBoundedString(data.title, 1, 200)
+        && isBoundedString(data.content, 1, 5000)
+        && data.audience in ['publik', 'guru', 'orang_tua', 'semua']
+        && data.priority in ['normal', 'penting']
+        && isBoundedString(data.publishedDate, 4, 20)
+        && isValidId(data.authorUid)
+        && isBoundedString(data.authorName, 1, 120)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAcademicEvent(data) {
+      return data.keys().hasAll(['title', 'startDate', 'endDate', 'category', 'authorUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['title', 'startDate', 'endDate', 'category', 'description', 'authorUid', 'createdAt', 'updatedAt'])
+        && isBoundedString(data.title, 1, 200)
+        && isBoundedString(data.startDate, 4, 20)
+        && isBoundedString(data.endDate, 4, 20)
+        && isBoundedString(data.category, 1, 60)
+        && (!data.keys().hasAny(['description']) || isBoundedString(data.description, 0, 1000))
+        && isValidId(data.authorUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidGalleryItem(data) {
+      return data.keys().hasAll(['title', 'mediaType', 'category', 'caption', 'eventDate', 'authorUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['title', 'mediaType', 'category', 'caption', 'mediaUrl', 'eventDate', 'authorUid', 'createdAt', 'updatedAt'])
+        && isBoundedString(data.title, 1, 180)
+        && data.mediaType in ['foto', 'video']
+        && isBoundedString(data.category, 1, 60)
+        && isBoundedString(data.caption, 1, 500)
+        && (!data.keys().hasAny(['mediaUrl']) || isBoundedString(data.mediaUrl, 0, 450000))
+        && isBoundedString(data.eventDate, 4, 20)
+        && isValidId(data.authorUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAchievement(data) {
+      return data.keys().hasAll(['title', 'recipientName', 'level', 'year', 'category', 'authorUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['title', 'recipientName', 'level', 'year', 'category', 'description', 'authorUid', 'createdAt', 'updatedAt'])
+        && isBoundedString(data.title, 1, 200)
+        && isBoundedString(data.recipientName, 1, 160)
+        && data.level in ['Kabupaten', 'Provinsi', 'Nasional', 'Internasional']
+        && isBoundedString(data.year, 4, 10)
+        && isBoundedString(data.category, 1, 60)
+        && (!data.keys().hasAny(['description']) || isBoundedString(data.description, 0, 1000))
+        && isValidId(data.authorUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPublicDirectoryEntry(data) {
+      return data.keys().hasAll(['name', 'roleType', 'position', 'authorUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['name', 'roleType', 'position', 'subject', 'education', 'authorUid', 'createdAt', 'updatedAt'])
+        && isBoundedString(data.name, 1, 140)
+        && data.roleType in ['guru', 'tendik', 'pimpinan']
+        && isBoundedString(data.position, 1, 120)
+        && (!data.keys().hasAny(['subject']) || isBoundedString(data.subject, 0, 120))
+        && (!data.keys().hasAny(['education']) || isBoundedString(data.education, 0, 80))
+        && isValidId(data.authorUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAcademicYear(data) {
+      return data.keys().hasAll(['name', 'semester', 'isActive', 'authorUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['name', 'semester', 'isActive', 'authorUid', 'createdAt', 'updatedAt'])
+        && isBoundedString(data.name, 4, 30)
+        && data.semester in ['Ganjil', 'Genap']
+        && data.isActive is bool
+        && isValidId(data.authorUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSchoolClass(data) {
+      return data.keys().hasAll(['name', 'gradeLevel', 'academicYearName', 'homeroomTeacherName', 'authorUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['name', 'gradeLevel', 'academicYearName', 'homeroomTeacherName', 'homeroomTeacherUid', 'studentCount', 'authorUid', 'createdAt', 'updatedAt'])
+        && isBoundedString(data.name, 1, 40)
+        && data.gradeLevel in ['X', 'XI', 'XII']
+        && isBoundedString(data.academicYearName, 4, 30)
+        && isBoundedString(data.homeroomTeacherName, 1, 140)
+        && (!data.keys().hasAny(['homeroomTeacherUid']) || isBoundedString(data.homeroomTeacherUid, 0, 128))
+        && (!data.keys().hasAny(['studentCount']) || (data.studentCount is number && data.studentCount >= 0 && data.studentCount <= 100))
+        && isValidId(data.authorUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSubject(data) {
+      return data.keys().hasAll(['code', 'name', 'category', 'kkm', 'authorUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['code', 'name', 'category', 'kkm', 'hoursPerWeek', 'authorUid', 'createdAt', 'updatedAt'])
+        && isBoundedString(data.code, 1, 20)
+        && isBoundedString(data.name, 1, 120)
+        && isBoundedString(data.category, 1, 60)
+        && data.kkm is number && data.kkm >= 0 && data.kkm <= 100
+        && (!data.keys().hasAny(['hoursPerWeek']) || (data.hoursPerWeek is number && data.hoursPerWeek >= 0 && data.hoursPerWeek <= 20))
+        && isValidId(data.authorUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTeacherStaff(data) {
+      return data.keys().hasAll(['nip', 'name', 'staffType', 'position', 'employmentStatus', 'authorUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['nip', 'name', 'staffType', 'position', 'subjectName', 'employmentStatus', 'email', 'phone', 'userUid', 'authorUid', 'createdAt', 'updatedAt'])
+        && isBoundedString(data.nip, 1, 40)
+        && isBoundedString(data.name, 1, 140)
+        && data.staffType in ['guru', 'tendik']
+        && isBoundedString(data.position, 1, 120)
+        && (!data.keys().hasAny(['subjectName']) || isBoundedString(data.subjectName, 0, 120))
+        && isBoundedString(data.employmentStatus, 1, 40)
+        && (!data.keys().hasAny(['email']) || isBoundedString(data.email, 0, 180))
+        && (!data.keys().hasAny(['phone']) || isBoundedString(data.phone, 0, 30))
+        && (!data.keys().hasAny(['userUid']) || isBoundedString(data.userUid, 0, 128))
+        && isValidId(data.authorUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStudent(data) {
+      return data.keys().hasAll(['nis', 'nisn', 'name', 'gender', 'classId', 'className', 'status', 'parentName', 'authorUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['nis', 'nisn', 'name', 'gender', 'classId', 'className', 'academicYearName', 'status', 'parentName', 'parentEmail', 'parentUid', 'previousSchool', 'authorUid', 'createdAt', 'updatedAt'])
+        && isBoundedString(data.nis, 1, 30)
+        && isBoundedString(data.nisn, 1, 30)
+        && isBoundedString(data.name, 1, 140)
+        && data.gender in ['L', 'P']
+        && isBoundedString(data.classId, 1, 128)
+        && isBoundedString(data.className, 1, 40)
+        && (!data.keys().hasAny(['academicYearName']) || isBoundedString(data.academicYearName, 0, 30))
+        && data.status in ['aktif', 'lulus', 'mutasi', 'cuti']
+        && isBoundedString(data.parentName, 1, 140)
+        && (!data.keys().hasAny(['parentEmail']) || isBoundedString(data.parentEmail, 0, 180))
+        && (!data.keys().hasAny(['parentUid']) || isBoundedString(data.parentUid, 0, 128))
+        && (!data.keys().hasAny(['previousSchool']) || isBoundedString(data.previousSchool, 0, 140))
+        && isValidId(data.authorUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidGradeRecord(data) {
+      return data.keys().hasAll(['studentId', 'studentName', 'classId', 'className', 'subjectName', 'semester', 'academicYearName', 'finalScore', 'predicate', 'authorUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['studentId', 'studentName', 'classId', 'className', 'subjectName', 'semester', 'academicYearName', 'uhScore', 'utsScore', 'uasScore', 'finalScore', 'predicate', 'parentEmail', 'authorUid', 'createdAt', 'updatedAt'])
+        && isBoundedString(data.studentId, 1, 128)
+        && isBoundedString(data.studentName, 1, 140)
+        && isBoundedString(data.classId, 1, 128)
+        && isBoundedString(data.className, 1, 40)
+        && isBoundedString(data.subjectName, 1, 120)
+        && data.semester in ['Ganjil', 'Genap']
+        && isBoundedString(data.academicYearName, 4, 30)
+        && (!data.keys().hasAny(['uhScore']) || (data.uhScore is number && data.uhScore >= 0 && data.uhScore <= 100))
+        && (!data.keys().hasAny(['utsScore']) || (data.utsScore is number && data.utsScore >= 0 && data.utsScore <= 100))
+        && (!data.keys().hasAny(['uasScore']) || (data.uasScore is number && data.uasScore >= 0 && data.uasScore <= 100))
+        && data.finalScore is number && data.finalScore >= 0 && data.finalScore <= 100
+        && isBoundedString(data.predicate, 1, 4)
+        && (!data.keys().hasAny(['parentEmail']) || isBoundedString(data.parentEmail, 0, 180))
+        && isValidId(data.authorUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAttendanceRecord(data) {
+      return data.keys().hasAll(['date', 'studentId', 'studentName', 'classId', 'className', 'status', 'recordedByName', 'authorUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['date', 'studentId', 'studentName', 'classId', 'className', 'subjectName', 'status', 'note', 'parentEmail', 'recordedByName', 'authorUid', 'createdAt', 'updatedAt'])
+        && isBoundedString(data.date, 8, 20)
+        && isBoundedString(data.studentId, 1, 128)
+        && isBoundedString(data.studentName, 1, 140)
+        && isBoundedString(data.classId, 1, 128)
+        && isBoundedString(data.className, 1, 40)
+        && (!data.keys().hasAny(['subjectName']) || isBoundedString(data.subjectName, 0, 120))
+        && data.status in ['Hadir', 'Izin', 'Sakit', 'Alpa']
+        && (!data.keys().hasAny(['note']) || isBoundedString(data.note, 0, 300))
+        && (!data.keys().hasAny(['parentEmail']) || isBoundedString(data.parentEmail, 0, 180))
+        && isBoundedString(data.recordedByName, 1, 140)
+        && isValidId(data.authorUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAttendanceNotification(data) {
+      return data.keys().hasAll(['studentId', 'studentName', 'className', 'parentEmail', 'date', 'status', 'message', 'isRead', 'authorUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['studentId', 'studentName', 'className', 'parentEmail', 'date', 'status', 'message', 'isRead', 'authorUid', 'createdAt', 'updatedAt'])
+        && isBoundedString(data.studentId, 1, 128)
+        && isBoundedString(data.studentName, 1, 140)
+        && isBoundedString(data.className, 1, 40)
+        && isBoundedString(data.parentEmail, 0, 180)
+        && isBoundedString(data.date, 8, 20)
+        && data.status in ['Hadir', 'Izin', 'Sakit', 'Alpa']
+        && isBoundedString(data.message, 1, 500)
+        && data.isRead is bool
+        && isValidId(data.authorUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidArchiveFolder(data) {
+      return data.keys().hasAll(['name', 'rootCategory', 'allowedRoles', 'authorUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['name', 'rootCategory', 'parentFolderId', 'description', 'allowedRoles', 'authorUid', 'createdAt', 'updatedAt'])
+        && isBoundedString(data.name, 1, 140)
+        && data.rootCategory in ['Manajerial', 'Kewirausahaan', 'Supervisi Tendik']
+        && (!data.keys().hasAny(['parentFolderId']) || isBoundedString(data.parentFolderId, 0, 128))
+        && (!data.keys().hasAny(['description']) || isBoundedString(data.description, 0, 400))
+        && data.allowedRoles is list && data.allowedRoles.size() >= 1 && data.allowedRoles.size() <= 7
+        && data.allowedRoles[0] is string
+        && isValidId(data.authorUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidDigitalArchive(data) {
+      return data.keys().hasAll(['title', 'folderId', 'rootCategory', 'fileName', 'fileType', 'year', 'documentDate', 'currentVersion', 'uploadedByName', 'authorUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['title', 'folderId', 'rootCategory', 'fileName', 'fileType', 'fileSize', 'year', 'documentDate', 'description', 'currentVersion', 'versions', 'contentDataUrl', 'linkedIndicatorCode', 'uploadedByName', 'authorUid', 'createdAt', 'updatedAt'])
+        && isBoundedString(data.title, 1, 200)
+        && isBoundedString(data.folderId, 1, 128)
+        && data.rootCategory in ['Manajerial', 'Kewirausahaan', 'Supervisi Tendik']
+        && isBoundedString(data.fileName, 1, 200)
+        && data.fileType in ['PDF', 'DOCX', 'XLSX', 'PPTX', 'JPG', 'PNG']
+        && (!data.keys().hasAny(['fileSize']) || (data.fileSize is number && data.fileSize >= 0 && data.fileSize <= 2000000))
+        && isBoundedString(data.year, 4, 10)
+        && isBoundedString(data.documentDate, 4, 20)
+        && (!data.keys().hasAny(['description']) || isBoundedString(data.description, 0, 1000))
+        && data.currentVersion is number && data.currentVersion >= 1 && data.currentVersion <= 100
+        && (!data.keys().hasAny(['versions']) || (data.versions is list && data.versions.size() <= 15))
+        && (!data.keys().hasAny(['contentDataUrl']) || isBoundedString(data.contentDataUrl, 0, 900000))
+        && (!data.keys().hasAny(['linkedIndicatorCode']) || isBoundedString(data.linkedIndicatorCode, 0, 30))
+        && isBoundedString(data.uploadedByName, 1, 140)
+        && isValidId(data.authorUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSupervisionInstrument(data) {
+      return data.keys().hasAll(['code', 'title', 'targetType', 'year', 'authorUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['code', 'title', 'targetType', 'year', 'description', 'authorUid', 'createdAt', 'updatedAt'])
+        && isBoundedString(data.code, 1, 40)
+        && isBoundedString(data.title, 1, 200)
+        && data.targetType in ['kepala_sekolah', 'guru', 'tendik']
+        && isBoundedString(data.year, 4, 10)
+        && (!data.keys().hasAny(['description']) || isBoundedString(data.description, 0, 1000))
+        && isValidId(data.authorUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSupervisionIndicator(data) {
+      return data.keys().hasAll(['instrumentId', 'sheetCode', 'sheetTitle', 'sectionTitle', 'orderIndex', 'code', 'taskOrIndicator', 'physicalEvidence', 'maxScale', 'authorUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['instrumentId', 'sheetCode', 'sheetTitle', 'sectionCode', 'sectionTitle', 'orderIndex', 'code', 'taskOrIndicator', 'physicalEvidence', 'inspectionMethod', 'generalItemLink', 'maxScale', 'authorUid', 'createdAt', 'updatedAt'])
+        && isBoundedString(data.instrumentId, 1, 128)
+        && isBoundedString(data.sheetCode, 1, 40)
+        && isBoundedString(data.sheetTitle, 1, 180)
+        && (!data.keys().hasAny(['sectionCode']) || isBoundedString(data.sectionCode, 0, 40))
+        && isBoundedString(data.sectionTitle, 1, 180)
+        && data.orderIndex is number && data.orderIndex >= 0 && data.orderIndex <= 500
+        && isBoundedString(data.code, 1, 20)
+        && isBoundedString(data.taskOrIndicator, 1, 600)
+        && data.physicalEvidence is list && data.physicalEvidence.size() <= 30
+        && (!data.keys().hasAny(['inspectionMethod']) || isBoundedString(data.inspectionMethod, 0, 120))
+        && (!data.keys().hasAny(['generalItemLink']) || isBoundedString(data.generalItemLink, 0, 60))
+        && data.maxScale is number && data.maxScale == 4
+        && isValidId(data.authorUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSupervisionSchedule(data) {
+      return data.keys().hasAll(['instrumentId', 'instrumentTitle', 'academicYearName', 'period', 'targetName', 'targetRole', 'supervisorName', 'scheduledDate', 'status', 'authorUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['instrumentId', 'instrumentTitle', 'academicYearName', 'period', 'targetName', 'targetRole', 'targetEmail', 'supervisorName', 'scheduledDate', 'status', 'authorUid', 'createdAt', 'updatedAt'])
+        && isBoundedString(data.instrumentId, 1, 128)
+        && isBoundedString(data.instrumentTitle, 1, 200)
+        && isBoundedString(data.academicYearName, 4, 30)
+        && isBoundedString(data.period, 1, 60)
+        && isBoundedString(data.targetName, 1, 140)
+        && isBoundedString(data.targetRole, 1, 60)
+        && (!data.keys().hasAny(['targetEmail']) || isBoundedString(data.targetEmail, 0, 180))
+        && isBoundedString(data.supervisorName, 1, 140)
+        && isBoundedString(data.scheduledDate, 4, 20)
+        && data.status in ['Terjadwal', 'Berlangsung', 'Selesai', 'Disetujui']
+        && isValidId(data.authorUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSupervisionAssessment(data) {
+      return data.keys().hasAll(['instrumentId', 'instrumentTitle', 'schoolName', 'assessedPersonName', 'supervisorName', 'academicYearName', 'period', 'overallScore', 'overallMaxScore', 'overallPercentage', 'overallPredicate', 'unfilledCount', 'status', 'authorUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['scheduleId', 'instrumentId', 'instrumentTitle', 'schoolName', 'assessedPersonName', 'assessedPersonRole', 'assessedPersonEmail', 'supervisorName', 'academicYearName', 'period', 'itemScores', 'sheetNotes', 'overallScore', 'overallMaxScore', 'overallPercentage', 'overallPredicate', 'unfilledCount', 'recommendations', 'followUpPlan', 'followUpDeadline', 'status', 'approvedByName', 'authorUid', 'createdAt', 'updatedAt'])
+        && (!data.keys().hasAny(['scheduleId']) || isBoundedString(data.scheduleId, 0, 128))
+        && isBoundedString(data.instrumentId, 1, 128)
+        && isBoundedString(data.instrumentTitle, 1, 200)
+        && isBoundedString(data.schoolName, 1, 180)
+        && isBoundedString(data.assessedPersonName, 1, 140)
+        && (!data.keys().hasAny(['assessedPersonRole']) || isBoundedString(data.assessedPersonRole, 0, 60))
+        && (!data.keys().hasAny(['assessedPersonEmail']) || isBoundedString(data.assessedPersonEmail, 0, 180))
+        && isBoundedString(data.supervisorName, 1, 140)
+        && isBoundedString(data.academicYearName, 4, 30)
+        && isBoundedString(data.period, 1, 60)
+        && (!data.keys().hasAny(['itemScores']) || data.itemScores is map)
+        && (!data.keys().hasAny(['sheetNotes']) || data.sheetNotes is map)
+        && data.overallScore is number && data.overallScore >= 0 && data.overallScore <= 1000
+        && data.overallMaxScore is number && data.overallMaxScore >= 0 && data.overallMaxScore <= 1000
+        && data.overallPercentage is number && data.overallPercentage >= 0 && data.overallPercentage <= 100
+        && isBoundedString(data.overallPredicate, 1, 40)
+        && data.unfilledCount is number && data.unfilledCount >= 0 && data.unfilledCount <= 200
+        && (!data.keys().hasAny(['recommendations']) || isBoundedString(data.recommendations, 0, 3000))
+        && (!data.keys().hasAny(['followUpPlan']) || isBoundedString(data.followUpPlan, 0, 3000))
+        && (!data.keys().hasAny(['followUpDeadline']) || isBoundedString(data.followUpDeadline, 0, 20))
+        && data.status in ['Draft', 'Selesai', 'Disetujui']
+        && (!data.keys().hasAny(['approvedByName']) || isBoundedString(data.approvedByName, 0, 140))
+        && isValidId(data.authorUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidActivityLog(data) {
+      return data.keys().hasAll(['actorUid', 'actorName', 'actorRole', 'action', 'module', 'details', 'createdAt'])
+        && data.keys().hasOnly(['actorUid', 'actorName', 'actorRole', 'action', 'module', 'details', 'createdAt'])
+        && isValidId(data.actorUid)
+        && isBoundedString(data.actorName, 1, 140)
+        && isBoundedString(data.actorRole, 1, 40)
+        && isBoundedString(data.action, 1, 120)
+        && isBoundedString(data.module, 1, 80)
+        && isBoundedString(data.details, 1, 600)
+        && data.createdAt is timestamp;
+    }
+
+    // 3. Collection Rules
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isEmailVerified() && isValidId(userId) && isValidUserAccount(incoming())
+        && incoming().uid == userId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            request.auth.uid == userId
+            && incoming().email == request.auth.token.email
+            && (
+              (isBootstrappedAdmin() && incoming().role == 'super_admin')
+              || (!isBootstrappedAdmin() && incoming().role == 'orang_tua' && incoming().activeStatus == 'aktif')
+            )
+          )
+        );
+      allow update: if isEmailVerified() && isValidId(userId) && isValidUserAccount(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            request.auth.uid == userId
+            && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    // Public School Profile CMS Collections (Public Read, Admin/Tendik Write)
+    match /school_content/{contentId} {
+      allow get: if isValidId(contentId);
+      allow list: if true;
+      allow create: if isStaffOrAdmin() && isValidId(contentId) && isValidSchoolContent(incoming())
+        && incoming().updatedByUid == request.auth.uid && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isStaffOrAdmin() && isValidId(contentId) && isValidSchoolContent(incoming())
+        && incoming().updatedByUid == request.auth.uid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'subtitle', 'body', 'items', 'updatedByUid', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(contentId);
+    }
+
+    match /news/{newsId} {
+      allow get: if isValidId(newsId);
+      allow list: if true;
+      allow create: if isStaffOrAdmin() && isValidId(newsId) && isValidNewsArticle(incoming())
+        && incoming().authorUid == request.auth.uid && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isStaffOrAdmin() && isValidId(newsId) && isValidNewsArticle(incoming())
+        && incoming().authorUid == existing().authorUid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'category', 'summary', 'content', 'imageUrl', 'publishedDate', 'authorName', 'isPublished', 'updatedAt']);
+      allow delete: if isStaffOrAdmin() && isValidId(newsId);
+    }
+
+    match /announcements/{announcementId} {
+      allow get: if isValidId(announcementId) && (existing().audience == 'publik' || isSignedIn());
+      allow list: if resource.data.audience == 'publik' || isSignedIn();
+      allow create: if isStaffOrAdmin() && isValidId(announcementId) && isValidAnnouncement(incoming())
+        && incoming().authorUid == request.auth.uid && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isStaffOrAdmin() && isValidId(announcementId) && isValidAnnouncement(incoming())
+        && incoming().authorUid == existing().authorUid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'audience', 'priority', 'publishedDate', 'authorName', 'updatedAt']);
+      allow delete: if isStaffOrAdmin() && isValidId(announcementId);
+    }
+
+    match /academic_events/{eventId} {
+      allow get: if isValidId(eventId);
+      allow list: if true;
+      allow create: if isStaffOrAdmin() && isValidId(eventId) && isValidAcademicEvent(incoming())
+        && incoming().authorUid == request.auth.uid && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isStaffOrAdmin() && isValidId(eventId) && isValidAcademicEvent(incoming())
+        && incoming().authorUid == existing().authorUid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'startDate', 'endDate', 'category', 'description', 'updatedAt']);
+      allow delete: if isStaffOrAdmin() && isValidId(eventId);
+    }
+
+    match /gallery_items/{itemId} {
+      allow get: if isValidId(itemId);
+      allow list: if true;
+      allow create: if isStaffOrAdmin() && isValidId(itemId) && isValidGalleryItem(incoming())
+        && incoming().authorUid == request.auth.uid && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isStaffOrAdmin() && isValidId(itemId) && isValidGalleryItem(incoming())
+        && incoming().authorUid == existing().authorUid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'mediaType', 'category', 'caption', 'mediaUrl', 'eventDate', 'updatedAt']);
+      allow delete: if isStaffOrAdmin() && isValidId(itemId);
+    }
+
+    match /achievements/{achievementId} {
+      allow get: if isValidId(achievementId);
+      allow list: if true;
+      allow create: if isStaffOrAdmin() && isValidId(achievementId) && isValidAchievement(incoming())
+        && incoming().authorUid == request.auth.uid && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isStaffOrAdmin() && isValidId(achievementId) && isValidAchievement(incoming())
+        && incoming().authorUid == existing().authorUid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'recipientName', 'level', 'year', 'category', 'description', 'updatedAt']);
+      allow delete: if isStaffOrAdmin() && isValidId(achievementId);
+    }
+
+    match /public_directory/{entryId} {
+      allow get: if isValidId(entryId);
+      allow list: if true;
+      allow create: if isStaffOrAdmin() && isValidId(entryId) && isValidPublicDirectoryEntry(incoming())
+        && incoming().authorUid == request.auth.uid && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isStaffOrAdmin() && isValidId(entryId) && isValidPublicDirectoryEntry(incoming())
+        && incoming().authorUid == existing().authorUid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'roleType', 'position', 'subject', 'education', 'updatedAt']);
+      allow delete: if isStaffOrAdmin() && isValidId(entryId);
+    }
+
+    // Academic Core Collections
+    match /academic_years/{yearId} {
+      allow get: if isSignedIn() && isValidId(yearId);
+      allow list: if isSignedIn();
+      allow create: if isStaffOrAdmin() && isValidId(yearId) && isValidAcademicYear(incoming())
+        && incoming().authorUid == request.auth.uid && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isStaffOrAdmin() && isValidId(yearId) && isValidAcademicYear(incoming())
+        && incoming().authorUid == existing().authorUid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'semester', 'isActive', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(yearId);
+    }
+
+    match /classes/{classId} {
+      allow get: if isSignedIn() && isValidId(classId);
+      allow list: if isSignedIn();
+      allow create: if isStaffOrAdmin() && isValidId(classId) && isValidSchoolClass(incoming())
+        && incoming().authorUid == request.auth.uid && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isStaffOrAdmin() && isValidId(classId) && isValidSchoolClass(incoming())
+        && incoming().authorUid == existing().authorUid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'gradeLevel', 'academicYearName', 'homeroomTeacherName', 'homeroomTeacherUid', 'studentCount', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(classId);
+    }
+
+    match /subjects/{subjectId} {
+      allow get: if isSignedIn() && isValidId(subjectId);
+      allow list: if isSignedIn();
+      allow create: if isStaffOrAdmin() && isValidId(subjectId) && isValidSubject(incoming())
+        && incoming().authorUid == request.auth.uid && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isStaffOrAdmin() && isValidId(subjectId) && isValidSubject(incoming())
+        && incoming().authorUid == existing().authorUid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['code', 'name', 'category', 'kkm', 'hoursPerWeek', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(subjectId);
+    }
+
+    match /teachers/{teacherId} {
+      allow get: if isValidId(teacherId) && isSchoolEducator();
+      allow list: if isSchoolEducator();
+      allow create: if isStaffOrAdmin() && isValidId(teacherId) && isValidTeacherStaff(incoming())
+        && incoming().authorUid == request.auth.uid && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isStaffOrAdmin() && isValidId(teacherId) && isValidTeacherStaff(incoming())
+        && incoming().authorUid == existing().authorUid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['nip', 'name', 'staffType', 'position', 'subjectName', 'employmentStatus', 'email', 'phone', 'userUid', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(teacherId);
+    }
+
+    match /students/{studentId} {
+      allow get: if isValidId(studentId) && (isSchoolEducator() || (isEmailVerified() && existing().parentEmail == request.auth.token.email));
+      allow list: if isSchoolEducator() || (isEmailVerified() && resource.data.parentEmail == request.auth.token.email);
+      allow create: if isStaffOrAdmin() && isValidId(studentId) && isValidStudent(incoming())
+        && incoming().authorUid == request.auth.uid && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isStaffOrAdmin() && isValidId(studentId) && isValidStudent(incoming())
+        && incoming().authorUid == existing().authorUid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['nis', 'nisn', 'name', 'gender', 'classId', 'className', 'academicYearName', 'status', 'parentName', 'parentEmail', 'parentUid', 'previousSchool', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(studentId);
+    }
+
+    match /grades/{gradeId} {
+      allow get: if isValidId(gradeId) && (isSchoolEducator() || (isEmailVerified() && existing().parentEmail == request.auth.token.email));
+      allow list: if isSchoolEducator() || (isEmailVerified() && resource.data.parentEmail == request.auth.token.email);
+      allow create: if isTeacherOrHomeroom() && isValidId(gradeId) && isValidGradeRecord(incoming())
+        && incoming().authorUid == request.auth.uid && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isTeacherOrHomeroom() && isValidId(gradeId) && isValidGradeRecord(incoming())
+        && incoming().authorUid == existing().authorUid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['uhScore', 'utsScore', 'uasScore', 'finalScore', 'predicate', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(gradeId);
+    }
+
+    // Attendance & Parent Notifications
+    match /attendance/{attendanceId} {
+      allow get: if isValidId(attendanceId) && (isSchoolEducator() || (isEmailVerified() && existing().parentEmail == request.auth.token.email));
+      allow list: if isSchoolEducator() || (isEmailVerified() && resource.data.parentEmail == request.auth.token.email);
+      allow create: if isTeacherOrHomeroom() && isValidId(attendanceId) && isValidAttendanceRecord(incoming())
+        && incoming().authorUid == request.auth.uid && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isTeacherOrHomeroom() && isValidId(attendanceId) && isValidAttendanceRecord(incoming())
+        && incoming().authorUid == existing().authorUid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'note', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(attendanceId);
+    }
+
+    match /attendance_notifications/{notifId} {
+      allow get: if isValidId(notifId) && (isSchoolEducator() || (isEmailVerified() && existing().parentEmail == request.auth.token.email));
+      allow list: if isSchoolEducator() || (isEmailVerified() && resource.data.parentEmail == request.auth.token.email);
+      allow create: if isTeacherOrHomeroom() && isValidId(notifId) && isValidAttendanceNotification(incoming())
+        && incoming().authorUid == request.auth.uid && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isEmailVerified() && isValidId(notifId) && isValidAttendanceNotification(incoming())
+        && incoming().authorUid == existing().authorUid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
+        && (isSchoolEducator() || existing().parentEmail == request.auth.token.email)
+        && incoming().diff(existing()).affectedKeys().hasOnly(['isRead', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(notifId);
+    }
+
+    // Digital Archives
+    match /archive_folders/{folderId} {
+      allow get: if isValidId(folderId) && isSchoolEducator() && (isAdmin() || isPrincipal() || currentUserRole() in existing().allowedRoles);
+      allow list: if isSchoolEducator();
+      allow create: if isStaffOrAdmin() && isValidId(folderId) && isValidArchiveFolder(incoming())
+        && incoming().authorUid == request.auth.uid && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isStaffOrAdmin() && isValidId(folderId) && isValidArchiveFolder(incoming())
+        && incoming().authorUid == existing().authorUid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'allowedRoles', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(folderId);
+    }
+
+    match /digital_archives/{archiveId} {
+      allow get: if isValidId(archiveId) && isSchoolEducator();
+      allow list: if isSchoolEducator();
+      allow create: if isStaffOrAdmin() && isValidId(archiveId) && isValidDigitalArchive(incoming())
+        && incoming().authorUid == request.auth.uid && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isStaffOrAdmin() && isValidId(archiveId) && isValidDigitalArchive(incoming())
+        && incoming().authorUid == existing().authorUid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'currentVersion', 'versions', 'contentDataUrl', 'linkedIndicatorCode', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(archiveId);
+    }
+
+    // Digital Supervision Module
+    match /supervision_instruments/{instrumentId} {
+      allow get: if isValidId(instrumentId) && isSchoolEducator();
+      allow list: if isSchoolEducator();
+      allow create: if isSupervisor() && isValidId(instrumentId) && isValidSupervisionInstrument(incoming())
+        && incoming().authorUid == request.auth.uid && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isSupervisor() && isValidId(instrumentId) && isValidSupervisionInstrument(incoming())
+        && incoming().authorUid == existing().authorUid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'year', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(instrumentId);
+    }
+
+    match /supervision_indicators/{indicatorId} {
+      allow get: if isValidId(indicatorId) && isSchoolEducator();
+      allow list: if isSchoolEducator();
+      allow create: if isSupervisor() && isValidId(indicatorId) && isValidSupervisionIndicator(incoming())
+        && incoming().authorUid == request.auth.uid && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isSupervisor() && isValidId(indicatorId) && isValidSupervisionIndicator(incoming())
+        && incoming().authorUid == existing().authorUid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['taskOrIndicator', 'physicalEvidence', 'inspectionMethod', 'generalItemLink', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(indicatorId);
+    }
+
+    match /supervision_schedules/{scheduleId} {
+      allow get: if isValidId(scheduleId) && isSchoolEducator();
+      allow list: if isSchoolEducator();
+      allow create: if isSupervisor() && isValidId(scheduleId) && isValidSupervisionSchedule(incoming())
+        && incoming().authorUid == request.auth.uid && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isSupervisor() && isValidId(scheduleId) && isValidSupervisionSchedule(incoming())
+        && incoming().authorUid == existing().authorUid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['scheduledDate', 'period', 'status', 'supervisorName', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(scheduleId);
+    }
+
+    match /supervision_assessments/{assessmentId} {
+      allow get: if isValidId(assessmentId) && isSchoolEducator();
+      allow list: if isSchoolEducator();
+      allow create: if isSupervisor() && isValidId(assessmentId) && isValidSupervisionAssessment(incoming())
+        && incoming().authorUid == request.auth.uid && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isEmailVerified() && isValidId(assessmentId) && isValidSupervisionAssessment(incoming())
+        && incoming().authorUid == existing().authorUid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (isPrincipal() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'approvedByName', 'recommendations', 'followUpPlan', 'followUpDeadline', 'updatedAt']))
+          || (isSupervisor() && existing().status != 'Disetujui' && incoming().status != 'Disetujui' && incoming().diff(existing()).affectedKeys().hasOnly(['itemScores', 'sheetNotes', 'overallScore', 'overallMaxScore', 'overallPercentage', 'overallPredicate', 'unfilledCount', 'recommendations', 'followUpPlan', 'followUpDeadline', 'status', 'updatedAt']))
+        );
+      allow delete: if isAdmin() && isValidId(assessmentId);
+    }
+
+    // Audit Activity Logs (Append-only)
+    match /activity_logs/{logId} {
+      allow get: if isValidId(logId) && (isPrincipal() || (isSignedIn() && existing().actorUid == request.auth.uid));
+      allow list: if isPrincipal() || (isSignedIn() && resource.data.actorUid == request.auth.uid);
+      allow create: if isEmailVerified() && isValidId(logId) && isValidActivityLog(incoming())
+        && incoming().actorUid == request.auth.uid && incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+  }
+}

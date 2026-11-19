@@ -43,6 +43,7 @@ import type {
 } from '../types/sims';
 import { ROLE_LABELS } from '../types/sims';
 import { ParentPortalView } from './ParentPortalView';
+import { PrincipalD3Charts } from './PrincipalD3Charts';
 
 interface DashboardHomeProps {
   onNavigate: (section: DashboardSection) => void;
@@ -173,6 +174,9 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
     return { name: c.name, avg, count: classGrades.length };
   });
 
+  const showPrincipalCharts =
+    effectiveRole === 'kepala_sekolah' || effectiveRole === 'super_admin';
+
   const canSeed =
     !isQuickSession &&
     (userAccount?.role === 'super_admin' || effectiveRole === 'super_admin' || effectiveRole === 'kepala_sekolah') &&
@@ -270,6 +274,16 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
         </div>
       </div>
 
+      {/* Interactive D3.js Charts for Principal & Super Admin */}
+      {showPrincipalCharts && (
+        <PrincipalD3Charts
+          attendance={attendance}
+          grades={grades}
+          classes={classes}
+          onNavigate={onNavigate}
+        />
+      )}
+
       {/* Role-Adaptive Main Content Grid */}
       <div className="grid lg:grid-cols-12 gap-6">
         {/* Chart: Academic Progress & Supervision Overview */}
@@ -277,12 +291,12 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-base font-semibold text-slate-950">
-                {effectiveRole === 'supervisor'
+                {effectiveRole === 'supervisor' || showPrincipalCharts
                   ? 'Rekapitulasi Skor Supervisi'
                   : 'Grafik Perkembangan Akademik per Rombel'}
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                {effectiveRole === 'supervisor'
+                {effectiveRole === 'supervisor' || showPrincipalCharts
                   ? 'Capaian nilai persentase instrumen supervisi tercatat'
                   : 'Rata-rata nilai akhir siswa berdasarkan rombongan belajar aktif'}
               </p>
@@ -290,7 +304,9 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
             <button
               type="button"
               onClick={() =>
-                onNavigate(effectiveRole === 'supervisor' ? 'supervision' : 'academic')
+                onNavigate(
+                  effectiveRole === 'supervisor' || showPrincipalCharts ? 'supervision' : 'academic'
+                )
               }
               className="text-xs font-semibold text-emerald-800 hover:underline"
             >
@@ -298,7 +314,7 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
             </button>
           </div>
 
-          {effectiveRole === 'supervisor' ? (
+          {effectiveRole === 'supervisor' || showPrincipalCharts ? (
             <div className="space-y-3">
               {assessments.length === 0 ? (
                 <p className="text-sm text-slate-500 py-8 text-center">

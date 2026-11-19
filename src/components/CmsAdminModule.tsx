@@ -12,13 +12,17 @@ import {
 import {
   Award,
   Calendar,
+  CheckCircle2,
+  Clock,
   Database,
   Download,
+  FileJson,
   FileText,
   Image,
   Megaphone,
   Newspaper,
   Plus,
+  RefreshCw,
   RotateCcw,
   Save,
   Shield,
@@ -59,6 +63,16 @@ import {
   DEFAULT_PUBLIC_PROFILE,
   seedInitialDatabase,
 } from '../lib/seedData';
+import {
+  BACKUP_COLLECTION_GROUPS,
+  formatBytes,
+  generateFullSystemBackup,
+  loadDailyBackupHistory,
+  recordDailyBackupHistory,
+  triggerJsonBackupDownload,
+  type DailyBackupHistoryEntry,
+  type FullSystemBackupPayload,
+} from '../lib/backupUtils';
 import type {
   AcademicEvent,
   Achievement,
@@ -79,7 +93,7 @@ interface CmsAdminModuleProps {
 }
 
 export type CmsTab = 'profil' | 'gambar' | 'berita_pengumuman' | 'kalender_prestasi' | 'direktori';
-type AdminTab = 'users' | 'audit';
+type AdminTab = 'users' | 'backup' | 'audit';
 
 const SECTION_KEYS = [
   { key: 'profile', label: 'Profil & Sejarah Sekolah' },
@@ -151,6 +165,15 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
 
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [seeding, setSeeding] = useState(false);
+
+  // Daily Backup State (Super Administrator)
+  const [backupPreview, setBackupPreview] = useState<FullSystemBackupPayload | null>(null);
+  const [loadingBackupPreview, setLoadingBackupPreview] = useState(false);
+  const [downloadingBackup, setDownloadingBackup] = useState(false);
+  const [includeEmbeddedInBackup, setIncludeEmbeddedInBackup] = useState(true);
+  const [backupHistory, setBackupHistory] = useState<DailyBackupHistoryEntry[]>(() =>
+    loadDailyBackupHistory()
+  );
 
   // Forms for CMS lists
   const [newsForm, setNewsForm] = useState({
@@ -1255,6 +1278,88 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
     }
   };
 
+  const refreshBackupSummary = async (includeEmbedded = includeEmbeddedInBackup) => {
+    if (!isRealAdmin) return;
+    setLoadingBackupPreview(true);
+    try {
+      const payload = await generateFullSystemBackup({
+        isQuickSession,
+        actorName: userAccount?.displayName || 'Super Administrator',
+        actorEmail: userAccount?.email || 'muhajir52@guru.sma.belajar.id',
+        includeEmbeddedFiles: includeEmbedded,
+      });
+      setBackupPreview(payload);
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : 'Gagal memuat ringkasan data backup sistem.'
+      );
+    } finally {
+      setLoadingBackupPreview(false);
+    }
+  };
+
+  useEffect(() => {
+    if (mode === 'users_audit' && adminTab === 'backup' && isRealAdmin) {
+      refreshBackupSummary(includeEmbeddedInBackup);
+    }
+  }, [mode, adminTab, isRealAdmin, isQuickSession, includeEmbeddedInBackup]);
+
+  const handleDownloadDailyBackup = async () => {
+    if (!isRealAdmin) return;
+    setDownloadingBackup(true);
+    try {
+      const payload = await generateFullSystemBackup({
+        isQuickSession,
+        actorName: userAccount?.displayName || 'Super Administrator',
+        actorEmail: userAccount?.email || 'muhajir52@guru.sma.belajar.id',
+        includeEmbeddedFiles: includeEmbeddedInBackup,
+      });
+      setBackupPreview(payload);
+      const { fileName, sizeBytes } = triggerJsonBackupDownload(payload);
+      const historyEntry: DailyBackupHistoryEntry = {
+        id: nextQuickId('bkp'),
+        date: payload.metadata.exportedDate,
+        timestamp: payload.metadata.exportedAt,
+        fileName,
+        totalRecords: payload.metadata.totalRecords,
+        sizeBytes,
+        sourceMode: payload.metadata.sourceMode,
+        actorName: userAccount?.displayName || 'Super Administrator',
+        includeEmbeddedFiles: includeEmbeddedInBackup,
+      };
+      const nextHistory = recordDailyBackupHistory(historyEntry);
+      setBackupHistory(nextHistory);
+
+      if (isQuickSession) {
+        appendQuickActivityLog({
+          actorUid: userAccount?.uid,
+          actorName: userAccount?.displayName || 'Super Administrator',
+          actorRole: 'super_admin',
+          action: 'Unduh Backup Database Harian (JSON)',
+          module: 'Backup Database',
+          details: `Mengunduh arsip offline ${fileName} (${payload.metadata.totalRecords} data, ${formatBytes(sizeBytes)}).`,
+        });
+        setLogs(loadQuickData<ActivityLog>(QUICK_KEYS.ACTIVITY_LOGS, DEFAULT_QUICK_ACTIVITY_LOGS));
+      } else {
+        await logActivity({
+          actorName: userAccount?.displayName || 'Super Administrator',
+          actorRole: 'super_admin',
+          action: 'Unduh Backup Database Harian (JSON)',
+          module: 'Backup Database',
+          details: `Mengunduh arsip offline ${fileName} (${payload.metadata.totalRecords} data, ${formatBytes(sizeBytes)}).`,
+        });
+      }
+
+      showToast(
+        `Cadangan database harian "${fileName}" (${payload.metadata.totalRecords} entri, ${formatBytes(sizeBytes)}) berhasil diunduh.`
+      );
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Gagal membuat file backup JSON.');
+    } finally {
+      setDownloadingBackup(false);
+    }
+  };
+
   const handleExportLogsExcel = () => {
     const rows = filteredLogs.map((l) => ({
       Aktor: l.actorName,
@@ -1313,19 +1418,32 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
           </div>
         )}
 
-        <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
           {isRealAdmin && (
-            <button
-              type="button"
-              onClick={() => setAdminTab('users')}
-              className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg whitespace-nowrap shrink-0 ${
-                adminTab === 'users'
-                  ? 'bg-emerald-800 text-white'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <Users className="w-4 h-4" /> Akun & Hak Akses ({users.length})
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setAdminTab('users')}
+                className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg whitespace-nowrap shrink-0 ${
+                  adminTab === 'users'
+                    ? 'bg-emerald-800 text-white'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <Users className="w-4 h-4" /> Akun & Hak Akses ({users.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdminTab('backup')}
+                className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg whitespace-nowrap shrink-0 ${
+                  adminTab === 'backup'
+                    ? 'bg-emerald-800 text-white'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <FileJson className="w-4 h-4" /> Backup Database Harian
+              </button>
+            </>
           )}
           <button
             type="button"
@@ -1406,6 +1524,219 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
             </div>
           </div>
         )}
+
+        {adminTab === 'backup' && isRealAdmin && (() => {
+          const todayStr = new Date().toISOString().slice(0, 10);
+          const todayEntry = backupHistory.find((h) => h.date === todayStr);
+          const estimatedBytes = backupPreview
+            ? new Blob([JSON.stringify(backupPreview, null, 2)]).size
+            : 0;
+
+          return (
+            <div className="space-y-6">
+              {/* Kartu Aksi Utama Backup Harian */}
+              <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-5">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 pb-5">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <FileJson className="w-5 h-5 text-emerald-800" />
+                      <h2 className="text-lg font-editorial font-semibold text-slate-950">
+                        Backup Database Harian (Arsip Offline JSON)
+                      </h2>
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed max-w-2xl">
+                      Unduh seluruh data sistem SIMS SMA Darul Ulum Kepohbaru (23 koleksi: Akademik,
+                      Siswa, Guru, Nilai, Absensi, Arsip Digital, Supervisi 88 Butir, CMS Web, Akun &
+                      Audit Log) dalam satu file JSON terstruktur untuk penyimpanan arsip offline harian.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => refreshBackupSummary(includeEmbeddedInBackup)}
+                      disabled={loadingBackupPreview}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold border border-slate-300 bg-white text-slate-700 rounded-lg hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 ${loadingBackupPreview ? 'animate-spin' : ''}`}
+                      />
+                      Muat Ulang Data
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadDailyBackup}
+                      disabled={downloadingBackup}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-800 text-white text-xs font-semibold rounded-lg hover:bg-emerald-900 disabled:opacity-60 whitespace-nowrap"
+                    >
+                      <Download className="w-4 h-4" />
+                      {downloadingBackup
+                        ? 'Menyiapkan File JSON...'
+                        : `Unduh Backup Harian (.json)`}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Status Backup Hari Ini & Opsi Berkas */}
+                <div className="grid md:grid-cols-3 gap-4">
+                  <div
+                    className={`rounded-xl border p-4 space-y-1 ${
+                      todayEntry
+                        ? 'bg-emerald-50/70 border-emerald-200'
+                        : 'bg-amber-50/80 border-amber-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 text-xs font-semibold">
+                      {todayEntry ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+                          <span className="text-emerald-900">Status Hari Ini ({todayStr}): Terbackup</span>
+                        </>
+                      ) : (
+                        <>
+                          <Clock className="w-4 h-4 text-amber-700" />
+                          <span className="text-amber-900">Status Hari Ini ({todayStr}): Belum Diunduh</span>
+                        </>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-600">
+                      {todayEntry
+                        ? `Terakhir diunduh pukul ${new Date(todayEntry.timestamp).toLocaleTimeString('id-ID', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })} WIB (${formatBytes(todayEntry.sizeBytes)}).`
+                        : 'Disarankan mengunduh file JSON harian secara rutin untuk cadangan arsip sekolah offline.'}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-1">
+                    <div className="text-xs font-semibold text-slate-600">Total Entri Data Sistem</div>
+                    <div className="text-2xl font-editorial font-semibold font-tabular text-slate-950">
+                      {loadingBackupPreview
+                        ? '...'
+                        : backupPreview?.metadata.totalRecords.toLocaleString('id-ID') || '0'}
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      Estimasi ukuran JSON:{' '}
+                      <span className="font-tabular font-semibold text-slate-700">
+                        {loadingBackupPreview ? '...' : formatBytes(estimatedBytes)}
+                      </span>{' '}
+                      · Sumber: {isQuickSession ? 'Sesi Lokal' : 'Cloud Firestore'}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 flex flex-col justify-between gap-2">
+                    <label className="flex items-start gap-2.5 cursor-pointer text-xs text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={includeEmbeddedInBackup}
+                        onChange={(e) => setIncludeEmbeddedInBackup(e.target.checked)}
+                        className="mt-0.5 rounded border-slate-300 text-emerald-800"
+                      />
+                      <span>
+                        <strong className="block text-slate-900">
+                          Sertakan Lampiran Berkas & Gambar Tersemat
+                        </strong>
+                        Menyertakan dokumen arsip dan foto yang diunggah langsung ke dalam file JSON
+                        (nonaktifkan untuk cadangan struktur ringan).
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Rincian Jumlah Data per Modul */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Cakupan Koleksi Database dalam Cadangan JSON
+                  </h3>
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {BACKUP_COLLECTION_GROUPS.map((grp) => (
+                      <div
+                        key={grp.group}
+                        className="border border-slate-200 rounded-lg p-3.5 space-y-2 bg-white"
+                      >
+                        <div className="text-xs font-semibold text-emerald-900 border-b border-slate-100 pb-1.5">
+                          {grp.group}
+                        </div>
+                        <div className="space-y-1">
+                          {grp.keys.map((item) => {
+                            const count = backupPreview?.metadata.collectionCounts[item.key] ?? 0;
+                            return (
+                              <div
+                                key={item.key}
+                                className="flex items-center justify-between text-xs text-slate-600"
+                              >
+                                <span>{item.label}</span>
+                                <span className="font-tabular font-semibold text-slate-900">
+                                  {loadingBackupPreview ? '...' : count}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Riwayat Pengunduhan Backup Harian */}
+              <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-base font-semibold text-slate-950">
+                    Riwayat Pengunduhan Backup Harian
+                  </h3>
+                  <span className="text-xs text-slate-500 font-tabular">
+                    {backupHistory.length} catatan tersimpan
+                  </span>
+                </div>
+                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                      <tr>
+                        <th className="py-2.5 px-4 font-semibold">Tanggal & Waktu</th>
+                        <th className="py-2.5 px-4 font-semibold">Nama File Arsip JSON</th>
+                        <th className="py-2.5 px-4 font-semibold">Sumber Data</th>
+                        <th className="py-2.5 px-4 font-semibold text-right">Total Data</th>
+                        <th className="py-2.5 px-4 font-semibold text-right">Ukuran File</th>
+                        <th className="py-2.5 px-4 font-semibold">Pelaksana</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {backupHistory.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-8 text-center text-slate-500 text-xs">
+                            Belum ada riwayat pengunduhan backup harian pada perangkat ini. Klik
+                            "Unduh Backup Harian (.json)" untuk membuat cadangan perdana.
+                          </td>
+                        </tr>
+                      ) : (
+                        backupHistory.map((h) => (
+                          <tr key={h.id} className="hover:bg-slate-50">
+                            <td className="py-2.5 px-4 text-xs font-tabular text-slate-700">
+                              {new Date(h.timestamp).toLocaleString('id-ID')}
+                            </td>
+                            <td className="py-2.5 px-4 text-xs font-mono text-emerald-900">
+                              {h.fileName}
+                            </td>
+                            <td className="py-2.5 px-4 text-xs text-slate-600">{h.sourceMode}</td>
+                            <td className="py-2.5 px-4 text-xs font-tabular font-semibold text-right">
+                              {h.totalRecords.toLocaleString('id-ID')}
+                            </td>
+                            <td className="py-2.5 px-4 text-xs font-tabular text-right text-slate-700">
+                              {formatBytes(h.sizeBytes)}
+                            </td>
+                            <td className="py-2.5 px-4 text-xs text-slate-700">{h.actorName}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {(adminTab === 'audit' || !isRealAdmin) && (
           <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">

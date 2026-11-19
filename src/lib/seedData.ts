@@ -97,8 +97,8 @@ export const DEFAULT_PUBLIC_PROFILE: Record<string, Omit<SchoolContent, 'id' | '
     subtitle: 'Kurikulum Merdeka Terintegrasi Nilai Keislaman',
     body: 'SMA Darul Ulum Kepohbaru menerapkan Kurikulum Satuan Pendidikan (KSP) berbasis fase E (Kelas X) dan fase F (Kelas XI–XII) dengan penguatan Projek Penguatan Profil Pelajar Pancasila (P5), bimbingan intensif masuk perguruan tinggi (SNBP/SNBT), kelas tahfidz & literasi kitab kuning, serta ekstrakurikuler riset, pramuka, dan kewirausahaan.',
     items: [
-      { label: 'Fase E (Kelas X)', value: '6 Rombel / Program Umum', description: 'Penguatan literasi, numerasi, dan proyek karakter' },
-      { label: 'Fase F (Kelas XI & XII)', value: 'Paket Peminatan MIPA, IPS & Keagamaan', description: 'Pendalaman mata pelajaran pilihan PTN' },
+      { label: 'Fase E (Kelas X)', value: '2 Rombel / Program Umum', description: 'Penguatan literasi, numerasi, dan proyek karakter' },
+      { label: 'Fase F (Kelas XI & XII)', value: '4 Rombel (2 Rombel Kelas XI & 2 Rombel Kelas XII)', description: 'Paket peminatan dan pendalaman mata pelajaran pilihan PTN' },
       { label: 'Program Khas', value: 'Tahfidz, Riset Karya Ilmiah, & Inkubator Bisnis Siswa', description: 'Terintegrasi dalam jadwal intrakurikuler & kokurikuler' },
     ],
   },
@@ -266,12 +266,7 @@ export const DEFAULT_ACADEMIC_YEARS: AcademicYear[] = [
   { id: 'ay_2025_genap', name: '2025/2026', semester: 'Genap', isActive: false, authorUid: 'system' },
 ];
 
-export const DEFAULT_CLASSES: SchoolClass[] = [
-  { id: 'cls_x_a', name: 'X-A', gradeLevel: 'X', academicYearName: '2026/2027', homeroomTeacherName: 'Ust. Ahmad Muzakki, M.Ag.', studentCount: 32, authorUid: 'system' },
-  { id: 'cls_xi_ipa_1', name: 'XI IPA 1', gradeLevel: 'XI', academicYearName: '2026/2027', homeroomTeacherName: 'Siti Aminah, S.Pd.', studentCount: 30, authorUid: 'system' },
-  { id: 'cls_xi_ips_1', name: 'XI IPS 1', gradeLevel: 'XI', academicYearName: '2026/2027', homeroomTeacherName: 'M. Sholihin, S.T.', studentCount: 28, authorUid: 'system' },
-  { id: 'cls_xii_ipa_1', name: 'XII IPA 1', gradeLevel: 'XII', academicYearName: '2026/2027', homeroomTeacherName: 'Muhajir, S.Pd., M.Pd.', studentCount: 31, authorUid: 'system' },
-];
+export const DEFAULT_CLASSES: SchoolClass[] = [];
 
 export const DEFAULT_SUBJECTS: Subject[] = [
   { id: 'sub_pai', code: 'PAI', name: 'Pendidikan Agama Islam & Budi Pekerti', category: 'Umum & Keislaman', kkm: 78, hoursPerWeek: 3, authorUid: 'system' },

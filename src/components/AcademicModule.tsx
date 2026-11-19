@@ -161,7 +161,7 @@ export function AcademicModule() {
       nisn: '',
       name: '',
       gender: 'L',
-      classId: classes[0]?.id || 'cls_x_a',
+      classId: classes[0]?.id || '',
       status: 'aktif',
       parentName: '',
       parentEmail: '',
@@ -196,8 +196,8 @@ export function AcademicModule() {
       nisn: studentForm.nisn.trim(),
       name: studentForm.name.trim(),
       gender: studentForm.gender,
-      classId: studentForm.classId || 'cls_x_a',
-      className: selectedCls?.name || 'X-A',
+      classId: studentForm.classId || selectedCls?.id || 'umum',
+      className: selectedCls?.name || 'Belum Ditentukan',
       academicYearName: activeYearName,
       status: studentForm.status,
       parentName: studentForm.parentName.trim(),
@@ -320,7 +320,7 @@ export function AcademicModule() {
             nisn: row.nisn || row.nis,
             name: row.name,
             gender: row.gender,
-            classId: cls?.id || 'cls_x_a',
+            classId: cls?.id || 'umum',
             className: cls?.name || row.className,
             academicYearName: activeYearName,
             status: 'aktif',
@@ -354,7 +354,7 @@ export function AcademicModule() {
           nisn: row.nisn || row.nis,
           name: row.name,
           gender: row.gender,
-          classId: cls?.id || 'cls_x_a',
+          classId: cls?.id || 'umum',
           className: cls?.name || row.className,
           academicYearName: activeYearName,
           status: 'aktif',
@@ -515,6 +515,38 @@ export function AcademicModule() {
       setFeedback('Rombongan belajar baru berhasil ditambahkan.');
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'classes');
+    }
+  };
+
+  const handleDeleteClass = async (cls: SchoolClass) => {
+    if (isQuickSession) {
+      const nextList = classes.filter((c) => c.id !== cls.id);
+      setClasses(nextList);
+      saveQuickData(QUICK_KEYS.CLASSES, nextList);
+      appendQuickActivityLog({
+        actorUid: userAccount?.uid,
+        actorName: userAccount?.displayName || 'Admin',
+        actorRole: effectiveRole,
+        action: 'Hapus Rombongan Belajar',
+        module: 'Akademik',
+        details: `Menghapus rombel ${cls.name} (Wali: ${cls.homeroomTeacherName}).`,
+      });
+      setFeedback(`Rombongan belajar ${cls.name} dihapus.`);
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, 'classes', cls.id));
+      await logActivity({
+        actorName: userAccount?.displayName || 'Admin',
+        actorRole: effectiveRole,
+        action: 'Hapus Rombongan Belajar',
+        module: 'Akademik',
+        details: `Menghapus rombel ${cls.name} (Wali: ${cls.homeroomTeacherName}).`,
+      });
+      setFeedback(`Rombongan belajar ${cls.name} dihapus.`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `classes/${cls.id}`);
     }
   };
 
@@ -1092,17 +1124,42 @@ export function AcademicModule() {
 
           {/* Rombongan Belajar & Wali Kelas */}
           <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
-            <h2 className="text-base font-semibold text-slate-950">Rombongan Belajar & Wali Kelas</h2>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-base font-semibold text-slate-950">Rombongan Belajar & Wali Kelas</h2>
+              <span className="text-xs font-tabular font-semibold text-emerald-900">
+                {classes.length} Rombel
+              </span>
+            </div>
             <div className="divide-y divide-slate-200 border border-slate-200 rounded-lg max-h-72 overflow-y-auto">
-              {classes.map((c) => (
-                <div key={c.id} className="p-3 flex items-center justify-between text-sm">
-                  <div>
-                    <div className="font-semibold text-slate-900">{c.name}</div>
-                    <div className="text-xs text-slate-500">Wali: {c.homeroomTeacherName}</div>
-                  </div>
-                  <div className="text-xs font-tabular text-slate-600">Tingkat {c.gradeLevel}</div>
+              {classes.length === 0 ? (
+                <div className="p-6 text-center text-xs text-slate-500 leading-relaxed">
+                  Daftar rombongan belajar & wali kelas masih kosong. Tambahkan rombel sendiri
+                  menggunakan formulir di bawah (misalnya 2 rombel Kelas X, 2 rombel Kelas XI, 2 rombel Kelas XII).
                 </div>
-              ))}
+              ) : (
+                classes.map((c) => (
+                  <div key={c.id} className="p-3 flex items-center justify-between gap-2 text-sm">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900 truncate">{c.name}</div>
+                      <div className="text-xs text-slate-500 truncate">
+                        Wali: {c.homeroomTeacherName}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      <span className="text-xs font-tabular text-slate-600">Tingkat {c.gradeLevel}</span>
+                      {canManageMaster && (isQuickSession || effectiveRole === 'super_admin') && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteClass(c)}
+                          className="text-xs font-medium text-red-700 hover:underline inline-flex items-center gap-1"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" /> Hapus
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
             {canManageMaster && (
               <form onSubmit={handleAddClass} className="space-y-2 pt-2 border-t border-slate-200">
@@ -1113,7 +1170,7 @@ export function AcademicModule() {
                     required
                     value={classForm.name}
                     onChange={(e) => setClassForm({ ...classForm, name: e.target.value })}
-                    placeholder="Nama Kelas (X-B)"
+                    placeholder="Contoh: X-1, XI-1, XII-1"
                     className="px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg"
                   />
                   <select
@@ -1128,13 +1185,21 @@ export function AcademicModule() {
                 </div>
                 <input
                   type="text"
+                  list="teacher-wali-options"
                   value={classForm.homeroomTeacherName}
                   onChange={(e) => setClassForm({ ...classForm, homeroomTeacherName: e.target.value })}
                   placeholder="Nama Wali Kelas"
                   className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg"
                 />
-                <button type="submit" className="w-full py-1.5 text-xs font-semibold bg-emerald-800 text-white rounded-lg">
-                  Simpan Kelas
+                {teachers.length > 0 && (
+                  <datalist id="teacher-wali-options">
+                    {teachers.map((t) => (
+                      <option key={t.id} value={t.name} />
+                    ))}
+                  </datalist>
+                )}
+                <button type="submit" className="w-full py-1.5 text-xs font-semibold bg-emerald-800 text-white rounded-lg hover:bg-emerald-900">
+                  Simpan Kelas & Wali Kelas
                 </button>
               </form>
             )}
@@ -1390,11 +1455,15 @@ export function AcademicModule() {
                   onChange={(e) => setStudentForm({ ...studentForm, classId: e.target.value })}
                   className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg"
                 >
-                  {classes.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
+                  {classes.length === 0 ? (
+                    <option value="">Belum ada rombel</option>
+                  ) : (
+                    classes.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
               <div>

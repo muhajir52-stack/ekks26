@@ -94,7 +94,7 @@ const NAV_ITEMS: NavConfig[] = [
   },
   {
     id: 'users_audit',
-    label: 'Akun & Audit Log',
+    label: 'Akun, Backup & Audit',
     icon: Shield,
     roles: ['super_admin', 'kepala_sekolah'],
   },

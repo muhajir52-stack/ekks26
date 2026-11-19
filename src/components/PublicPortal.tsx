@@ -3,7 +3,9 @@ import { collection, onSnapshot } from 'firebase/firestore';
 import {
   ArrowRight,
   Calendar,
+  ChevronDown,
   ChevronRight,
+  KeyRound,
   Mail,
   MapPin,
   Menu,
@@ -12,6 +14,8 @@ import {
   X,
 } from 'lucide-react';
 import { db } from '../lib/firebase';
+import { QUICK_ACCOUNTS } from '../context/AuthContext';
+import { loadQuickData, loadQuickRecord, QUICK_KEYS } from '../lib/quickLocalStore';
 import {
   DEFAULT_ACHIEVEMENTS,
   DEFAULT_ANNOUNCEMENTS,
@@ -21,14 +25,15 @@ import {
   DEFAULT_PUBLIC_DIRECTORY,
   DEFAULT_PUBLIC_PROFILE,
 } from '../lib/seedData';
-import type {
-  AcademicEvent,
-  Achievement,
-  Announcement,
-  GalleryItem,
-  NewsArticle,
-  PublicDirectoryEntry,
-  SchoolContent,
+import {
+  ROLE_LABELS,
+  type AcademicEvent,
+  type Achievement,
+  type Announcement,
+  type GalleryItem,
+  type NewsArticle,
+  type PublicDirectoryEntry,
+  type SchoolContent,
 } from '../types/sims';
 import { isRenderableImageUrl, parseSiteVisuals } from '../lib/imageUtils';
 import { CampusHeroVisual, EditorialCardVisual, PrincipalAvatarVisual } from './SchoolVisuals';
@@ -37,12 +42,14 @@ type PublicTab = 'beranda' | 'profil' | 'akademik' | 'kabar' | 'ppdb_kontak';
 
 interface PublicPortalProps {
   onOpenPortal: () => void;
+  onQuickLogin?: (accountId: string) => void;
   isAuthenticated: boolean;
 }
 
-export function PublicPortal({ onOpenPortal, isAuthenticated }: PublicPortalProps) {
+export function PublicPortal({ onOpenPortal, onQuickLogin, isAuthenticated }: PublicPortalProps) {
   const [activeTab, setActiveTab] = useState<PublicTab>('beranda');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [quickMenuOpen, setQuickMenuOpen] = useState(false);
 
   const [contents, setContents] = useState<Record<string, Omit<SchoolContent, 'id' | 'updatedByUid'>>>(
     DEFAULT_PUBLIC_PROFILE
@@ -77,19 +84,50 @@ export function PublicPortal({ onOpenPortal, isAuthenticated }: PublicPortalProp
   const [inquiryForm, setInquiryForm] = useState({ name: '', contact: '', topic: 'Informasi PPDB', message: '' });
 
   useEffect(() => {
+    const localContent = loadQuickRecord<Record<string, Omit<SchoolContent, 'id' | 'updatedByUid'>>>(
+      QUICK_KEYS.SCHOOL_CONTENT,
+      {}
+    );
+    if (Object.keys(localContent).length > 0) {
+      setContents((prev) => ({ ...prev, ...localContent }));
+    }
+    const localNews = loadQuickData<NewsArticle>(QUICK_KEYS.NEWS, []);
+    if (localNews.length > 0) setNews(localNews.filter((n) => n.isPublished));
+    const localAnn = loadQuickData<Announcement>(QUICK_KEYS.ANNOUNCEMENTS, []);
+    if (localAnn.length > 0) {
+      setAnnouncements(
+        localAnn.filter((a) => a.audience === 'publik' || a.audience === 'semua')
+      );
+    }
+    const localEvents = loadQuickData<AcademicEvent>(QUICK_KEYS.EVENTS, []);
+    if (localEvents.length > 0) setEvents(localEvents);
+    const localAch = loadQuickData<Achievement>(QUICK_KEYS.ACHIEVEMENTS, []);
+    if (localAch.length > 0) setAchievements(localAch);
+    const localGal = loadQuickData<GalleryItem>(QUICK_KEYS.GALLERY, []);
+    if (localGal.length > 0) setGallery(localGal);
+    const localDir = loadQuickData<PublicDirectoryEntry>(QUICK_KEYS.DIRECTORY, []);
+    if (localDir.length > 0) setDirectory(localDir);
+
     const unsubs: Array<() => void> = [];
 
     unsubs.push(
       onSnapshot(
         collection(db, 'school_content'),
         (snap) => {
-          if (!snap.empty) {
+          const localOverrides = loadQuickRecord<Record<string, Omit<SchoolContent, 'id' | 'updatedByUid'>>>(
+            QUICK_KEYS.SCHOOL_CONTENT,
+            {}
+          );
+          if (!snap.empty || Object.keys(localOverrides).length > 0) {
             const map: Record<string, Omit<SchoolContent, 'id' | 'updatedByUid'>> = {
               ...DEFAULT_PUBLIC_PROFILE,
             };
             snap.forEach((d) => {
               const data = d.data() as SchoolContent;
               map[d.id] = data;
+            });
+            Object.entries(localOverrides).forEach(([k, val]) => {
+              map[k] = val;
             });
             setContents(map);
           }
@@ -102,6 +140,11 @@ export function PublicPortal({ onOpenPortal, isAuthenticated }: PublicPortalProp
       onSnapshot(
         collection(db, 'news'),
         (snap) => {
+          const local = loadQuickData<NewsArticle>(QUICK_KEYS.NEWS, []);
+          if (local.length > 0) {
+            setNews(local.filter((n) => n.isPublished).sort((a, b) => b.publishedDate.localeCompare(a.publishedDate)));
+            return;
+          }
           if (!snap.empty) {
             const items = snap.docs
               .map((d) => ({ id: d.id, ...(d.data() as Omit<NewsArticle, 'id'>) }))
@@ -118,6 +161,15 @@ export function PublicPortal({ onOpenPortal, isAuthenticated }: PublicPortalProp
       onSnapshot(
         collection(db, 'announcements'),
         (snap) => {
+          const local = loadQuickData<Announcement>(QUICK_KEYS.ANNOUNCEMENTS, []);
+          if (local.length > 0) {
+            setAnnouncements(
+              local
+                .filter((a) => a.audience === 'publik' || a.audience === 'semua')
+                .sort((a, b) => b.publishedDate.localeCompare(a.publishedDate))
+            );
+            return;
+          }
           if (!snap.empty) {
             const items = snap.docs
               .map((d) => ({ id: d.id, ...(d.data() as Omit<Announcement, 'id'>) }))
@@ -134,6 +186,11 @@ export function PublicPortal({ onOpenPortal, isAuthenticated }: PublicPortalProp
       onSnapshot(
         collection(db, 'academic_events'),
         (snap) => {
+          const local = loadQuickData<AcademicEvent>(QUICK_KEYS.EVENTS, []);
+          if (local.length > 0) {
+            setEvents(local.sort((a, b) => a.startDate.localeCompare(b.startDate)));
+            return;
+          }
           if (!snap.empty) {
             setEvents(
               snap.docs
@@ -150,6 +207,11 @@ export function PublicPortal({ onOpenPortal, isAuthenticated }: PublicPortalProp
       onSnapshot(
         collection(db, 'achievements'),
         (snap) => {
+          const local = loadQuickData<Achievement>(QUICK_KEYS.ACHIEVEMENTS, []);
+          if (local.length > 0) {
+            setAchievements(local);
+            return;
+          }
           if (!snap.empty) {
             setAchievements(
               snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Achievement, 'id'>) }))
@@ -164,6 +226,11 @@ export function PublicPortal({ onOpenPortal, isAuthenticated }: PublicPortalProp
       onSnapshot(
         collection(db, 'gallery_items'),
         (snap) => {
+          const local = loadQuickData<GalleryItem>(QUICK_KEYS.GALLERY, []);
+          if (local.length > 0) {
+            setGallery(local);
+            return;
+          }
           if (!snap.empty) {
             setGallery(
               snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<GalleryItem, 'id'>) }))
@@ -178,6 +245,11 @@ export function PublicPortal({ onOpenPortal, isAuthenticated }: PublicPortalProp
       onSnapshot(
         collection(db, 'public_directory'),
         (snap) => {
+          const local = loadQuickData<PublicDirectoryEntry>(QUICK_KEYS.DIRECTORY, []);
+          if (local.length > 0) {
+            setDirectory(local);
+            return;
+          }
           if (!snap.empty) {
             setDirectory(
               snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<PublicDirectoryEntry, 'id'>) }))
@@ -262,7 +334,61 @@ export function PublicPortal({ onOpenPortal, isAuthenticated }: PublicPortalProp
             ))}
           </nav>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 relative">
+            {onQuickLogin && (
+              <div className="relative hidden sm:block">
+                <button
+                  type="button"
+                  onClick={() => setQuickMenuOpen((v) => !v)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-emerald-900 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors whitespace-nowrap shrink-0"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  Akun Dasbor
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </button>
+                {quickMenuOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setQuickMenuOpen(false)}
+                    />
+                    <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-lg p-2 z-50 space-y-1">
+                      <div className="px-3 py-2 border-b border-slate-100">
+                        <div className="text-xs font-semibold text-slate-900">
+                          Menu Akun Masuk Langsung ke Dasbor
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          Pilih akun untuk langsung masuk tanpa Google pop-up
+                        </div>
+                      </div>
+                      {QUICK_ACCOUNTS.map((acc) => (
+                        <button
+                          key={acc.id}
+                          type="button"
+                          onClick={() => {
+                            setQuickMenuOpen(false);
+                            onQuickLogin(acc.id);
+                          }}
+                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-emerald-50 transition-colors flex items-center justify-between gap-2"
+                        >
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-slate-900 truncate">
+                              {acc.displayName}
+                            </div>
+                            <div className="text-[11px] text-emerald-800 font-medium truncate">
+                              {ROLE_LABELS[acc.role]}
+                            </div>
+                          </div>
+                          <span className="text-[11px] font-semibold text-emerald-800 shrink-0">
+                            Masuk →
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
             <button
               type="button"
               onClick={onOpenPortal}
@@ -295,6 +421,27 @@ export function PublicPortal({ onOpenPortal, isAuthenticated }: PublicPortalProp
                 {item.label}
               </button>
             ))}
+            {onQuickLogin && (
+              <div className="mt-2 pt-2 border-t border-slate-200 space-y-1">
+                <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-emerald-800">
+                  Akun Masuk Langsung ke Dasbor
+                </div>
+                {QUICK_ACCOUNTS.map((acc) => (
+                  <button
+                    key={acc.id}
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      onQuickLogin(acc.id);
+                    }}
+                    className="w-full text-left py-2 px-3 rounded-lg hover:bg-emerald-50 flex items-center justify-between text-xs"
+                  >
+                    <span className="font-semibold text-slate-900">{acc.displayName}</span>
+                    <span className="text-emerald-800 font-medium">{ROLE_LABELS[acc.role]}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </header>

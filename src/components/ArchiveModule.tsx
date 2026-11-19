@@ -27,6 +27,17 @@ import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 import { logActivity } from '../lib/audit';
 import {
+  DEFAULT_ARCHIVE_FOLDERS,
+  DEFAULT_DIGITAL_ARCHIVES,
+} from '../lib/seedData';
+import {
+  appendQuickActivityLog,
+  loadQuickData,
+  nextQuickId,
+  QUICK_KEYS,
+  saveQuickData,
+} from '../lib/quickLocalStore';
+import {
   ROLE_LABELS,
   type ArchiveFileType,
   type ArchiveFolder,
@@ -39,7 +50,7 @@ const ROOT_CATEGORIES: ArchiveRootCategory[] = ['Manajerial', 'Kewirausahaan', '
 const ALLOWED_EXTENSIONS: ArchiveFileType[] = ['PDF', 'DOCX', 'XLSX', 'PPTX', 'JPG', 'PNG'];
 
 export function ArchiveModule() {
-  const { userAccount, effectiveRole } = useAuth();
+  const { userAccount, effectiveRole, isQuickSession } = useAuth();
   const [folders, setFolders] = useState<ArchiveFolder[]>([]);
   const [archives, setArchives] = useState<DigitalArchive[]>([]);
 
@@ -82,6 +93,12 @@ export function ArchiveModule() {
   const canManageArchives = ['super_admin', 'kepala_sekolah', 'tendik'].includes(effectiveRole);
 
   useEffect(() => {
+    if (isQuickSession) {
+      setFolders(loadQuickData(QUICK_KEYS.ARCHIVE_FOLDERS, DEFAULT_ARCHIVE_FOLDERS));
+      setArchives(loadQuickData(QUICK_KEYS.DIGITAL_ARCHIVES, DEFAULT_DIGITAL_ARCHIVES));
+      return;
+    }
+
     const unsubs = [
       onSnapshot(
         collection(db, 'archive_folders'),
@@ -108,7 +125,7 @@ export function ArchiveModule() {
       ),
     ];
     return () => unsubs.forEach((u) => u());
-  }, []);
+  }, [isQuickSession]);
 
   const hasFolderAccess = (folder: ArchiveFolder) => {
     if (effectiveRole === 'super_admin' || effectiveRole === 'kepala_sekolah') return true;
@@ -172,6 +189,41 @@ export function ArchiveModule() {
   const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userAccount || !folderForm.name.trim()) return;
+    if (isQuickSession) {
+      const nextList: ArchiveFolder[] = [
+        ...folders,
+        {
+          id: nextQuickId('fld'),
+          name: folderForm.name.trim(),
+          rootCategory: selectedRoot,
+          parentFolderId: folderForm.parentFolderId,
+          description: folderForm.description.trim(),
+          allowedRoles:
+            folderForm.allowedRoles.length > 0 ? folderForm.allowedRoles : ['super_admin'],
+          authorUid: userAccount.uid,
+        },
+      ];
+      setFolders(nextList);
+      saveQuickData(QUICK_KEYS.ARCHIVE_FOLDERS, nextList);
+      appendQuickActivityLog({
+        actorUid: userAccount.uid,
+        actorName: userAccount.displayName,
+        actorRole: effectiveRole,
+        action: 'Buat Folder Arsip',
+        module: 'Arsip Digital',
+        details: `Membuat folder "${folderForm.name}" di direktori ${selectedRoot}.`,
+      });
+      setShowFolderModal(false);
+      setFolderForm({
+        name: '',
+        description: '',
+        parentFolderId: '',
+        allowedRoles: ['super_admin', 'kepala_sekolah', 'tendik', 'supervisor'],
+      });
+      setFeedback('Folder arsip baru berhasil dibuat.');
+      return;
+    }
+
     try {
       await addDoc(collection(db, 'archive_folders'), {
         name: folderForm.name.trim(),
@@ -208,6 +260,59 @@ export function ArchiveModule() {
     e.preventDefault();
     if (!userAccount) return;
     const targetFolderId = selectedFolderId || rootFolders[0]?.id || 'fld_man_1';
+    if (isQuickSession) {
+      const created: DigitalArchive = {
+        id: nextQuickId('arc'),
+        title: uploadForm.title.trim(),
+        folderId: targetFolderId,
+        rootCategory: selectedRoot,
+        fileName: uploadForm.fileName || `${uploadForm.title}.pdf`,
+        fileType: uploadForm.fileType,
+        fileSize: uploadForm.fileSize,
+        year: uploadForm.year,
+        documentDate: uploadForm.documentDate,
+        description: uploadForm.description.trim(),
+        currentVersion: 1,
+        versions: [
+          {
+            version: 1,
+            updatedAt: new Date().toISOString().slice(0, 10),
+            updatedBy: userAccount.displayName,
+            note: 'Unggahan versi awal dokumen.',
+          },
+        ],
+        contentDataUrl: uploadForm.contentDataUrl,
+        linkedIndicatorCode: uploadForm.linkedIndicatorCode.trim(),
+        uploadedByName: userAccount.displayName,
+        authorUid: userAccount.uid,
+      };
+      const nextList = [created, ...archives];
+      setArchives(nextList);
+      saveQuickData(QUICK_KEYS.DIGITAL_ARCHIVES, nextList);
+      appendQuickActivityLog({
+        actorUid: userAccount.uid,
+        actorName: userAccount.displayName,
+        actorRole: effectiveRole,
+        action: 'Unggah Dokumen Arsip',
+        module: 'Arsip Digital',
+        details: `Mengunggah "${uploadForm.title}" (${uploadForm.fileType}) ke ${selectedRoot}.`,
+      });
+      setShowUploadModal(false);
+      setUploadForm({
+        title: '',
+        fileName: '',
+        fileType: 'PDF',
+        fileSize: 0,
+        year: '2026',
+        documentDate: new Date().toISOString().slice(0, 10),
+        description: '',
+        linkedIndicatorCode: '',
+        contentDataUrl: '',
+      });
+      setFeedback('Dokumen arsip berhasil disimpan.');
+      return;
+    }
+
     try {
       await addDoc(collection(db, 'digital_archives'), {
         title: uploadForm.title.trim(),
@@ -273,6 +378,37 @@ export function ArchiveModule() {
         note: newVersionNote.trim() || `Pembaruan dokumen ke versi ${nextVersion}.`,
       },
     ];
+    if (isQuickSession) {
+      const nextList = archives.map((a) =>
+        a.id === versionDoc.id
+          ? {
+              ...a,
+              currentVersion: nextVersion,
+              versions: nextHistory,
+              ...(newVersionDataUrl ? { contentDataUrl: newVersionDataUrl } : {}),
+            }
+          : a
+      );
+      setArchives(nextList);
+      saveQuickData(QUICK_KEYS.DIGITAL_ARCHIVES, nextList);
+      appendQuickActivityLog({
+        actorUid: userAccount.uid,
+        actorName: userAccount.displayName,
+        actorRole: effectiveRole,
+        action: 'Revisi Versi Arsip',
+        module: 'Arsip Digital',
+        details: `Memperbarui "${versionDoc.title}" ke versi v${nextVersion}${
+          newVersionFileName ? ` (${newVersionFileName})` : ''
+        }.`,
+      });
+      setVersionDoc(null);
+      setNewVersionNote('');
+      setNewVersionDataUrl('');
+      setNewVersionFileName('');
+      setFeedback(`Dokumen diperbarui ke versi v${nextVersion}.`);
+      return;
+    }
+
     try {
       await updateDoc(doc(db, 'digital_archives', versionDoc.id), {
         currentVersion: nextVersion,
@@ -318,6 +454,22 @@ export function ArchiveModule() {
   };
 
   const handleDeleteArchive = async (item: DigitalArchive) => {
+    if (isQuickSession) {
+      const nextList = archives.filter((a) => a.id !== item.id);
+      setArchives(nextList);
+      saveQuickData(QUICK_KEYS.DIGITAL_ARCHIVES, nextList);
+      appendQuickActivityLog({
+        actorUid: userAccount?.uid,
+        actorName: userAccount?.displayName || 'Admin',
+        actorRole: effectiveRole,
+        action: 'Hapus Dokumen Arsip',
+        module: 'Arsip Digital',
+        details: `Menghapus arsip "${item.title}".`,
+      });
+      setFeedback(`Arsip "${item.title}" dihapus.`);
+      return;
+    }
+
     try {
       await deleteDoc(doc(db, 'digital_archives', item.id));
       await logActivity({
@@ -333,6 +485,32 @@ export function ArchiveModule() {
   };
 
   const handleExportBackup = async () => {
+    if (isQuickSession) {
+      const backupPayload: Record<string, unknown> = {
+        archive_folders: folders,
+        digital_archives: archives,
+        exportedAt: new Date().toISOString(),
+        mode: 'quick_session_local',
+      };
+      const blob = new Blob([JSON.stringify(backupPayload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Backup_SIMS_SMA_DU_${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      appendQuickActivityLog({
+        actorUid: userAccount?.uid,
+        actorName: userAccount?.displayName || 'Admin',
+        actorRole: effectiveRole,
+        action: 'Backup Database JSON',
+        module: 'Arsip & Keamanan',
+        details: 'Mengunduh paket cadangan data arsip lokal.',
+      });
+      setFeedback('Cadangan data arsip lokal (JSON Backup) berhasil diunduh.');
+      return;
+    }
+
     const collectionsToBackup = [
       'students',
       'teachers',

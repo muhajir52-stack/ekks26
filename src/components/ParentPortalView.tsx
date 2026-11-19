@@ -3,6 +3,14 @@ import { collection, doc, onSnapshot, query, serverTimestamp, updateDoc, where }
 import { Bell, BookOpen, CalendarCheck, Check, UserCheck } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
+import {
+  DEFAULT_ANNOUNCEMENTS,
+  DEFAULT_ATTENDANCE,
+  DEFAULT_ATTENDANCE_NOTIFICATIONS,
+  DEFAULT_GRADES,
+  DEFAULT_STUDENTS,
+} from '../lib/seedData';
+import { loadQuickData, QUICK_KEYS, saveQuickData } from '../lib/quickLocalStore';
 import type {
   Announcement,
   AttendanceNotification,
@@ -12,7 +20,7 @@ import type {
 } from '../types/sims';
 
 export function ParentPortalView() {
-  const { userAccount, effectiveRole } = useAuth();
+  const { userAccount, effectiveRole, isQuickSession } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [grades, setGrades] = useState<GradeRecord[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
@@ -25,6 +33,63 @@ export function ParentPortalView() {
 
   useEffect(() => {
     if (!parentEmail) return;
+
+    if (isQuickSession) {
+      const allStudents = loadQuickData(QUICK_KEYS.STUDENTS, DEFAULT_STUDENTS);
+      const filteredStudents = isPreviewMode
+        ? allStudents
+        : allStudents.filter(
+            (s) => (s.parentEmail || '').toLowerCase() === parentEmail.toLowerCase()
+          );
+      setStudents(filteredStudents);
+      if (filteredStudents.length > 0 && !selectedStudentId) {
+        setSelectedStudentId(filteredStudents[0].id);
+      }
+
+      const allGrades = loadQuickData(QUICK_KEYS.GRADES, DEFAULT_GRADES);
+      setGrades(
+        isPreviewMode
+          ? allGrades
+          : allGrades.filter(
+              (g) => (g.parentEmail || '').toLowerCase() === parentEmail.toLowerCase()
+            )
+      );
+
+      const allAtt = loadQuickData(QUICK_KEYS.ATTENDANCE, DEFAULT_ATTENDANCE);
+      setAttendance(
+        (isPreviewMode
+          ? allAtt
+          : allAtt.filter(
+              (a) => (a.parentEmail || '').toLowerCase() === parentEmail.toLowerCase()
+            )
+        ).sort((a, b) => b.date.localeCompare(a.date))
+      );
+
+      const allNotif = loadQuickData(
+        QUICK_KEYS.ATTENDANCE_NOTIFICATIONS,
+        DEFAULT_ATTENDANCE_NOTIFICATIONS
+      );
+      setNotifications(
+        (isPreviewMode
+          ? allNotif
+          : allNotif.filter(
+              (n) => (n.parentEmail || '').toLowerCase() === parentEmail.toLowerCase()
+            )
+        ).sort((a, b) => b.date.localeCompare(a.date))
+      );
+
+      const defAnn: Announcement[] = DEFAULT_ANNOUNCEMENTS.map((a, i) => ({
+        ...a,
+        id: `ann_seed_${i + 1}`,
+        authorUid: 'system',
+      }));
+      setAnnouncements(
+        loadQuickData(QUICK_KEYS.ANNOUNCEMENTS, defAnn)
+          .filter((a) => a.audience === 'orang_tua' || a.audience === 'publik' || a.audience === 'semua')
+          .sort((a, b) => b.publishedDate.localeCompare(a.publishedDate))
+      );
+      return;
+    }
 
     const studentQ = isPreviewMode
       ? collection(db, 'students')
@@ -96,7 +161,7 @@ export function ParentPortalView() {
     ];
 
     return () => unsubs.forEach((u) => u());
-  }, [parentEmail, isPreviewMode, selectedStudentId]);
+  }, [parentEmail, isPreviewMode, isQuickSession, selectedStudentId]);
 
   const activeStudent = students.find((s) => s.id === selectedStudentId) || students[0];
   const studentGrades = activeStudent
@@ -108,6 +173,16 @@ export function ParentPortalView() {
   const unreadNotifs = notifications.filter((n) => !n.isRead);
 
   const handleMarkRead = async (notifId: string) => {
+    if (isQuickSession) {
+      const allNotif = loadQuickData(
+        QUICK_KEYS.ATTENDANCE_NOTIFICATIONS,
+        DEFAULT_ATTENDANCE_NOTIFICATIONS
+      ).map((n) => (n.id === notifId ? { ...n, isRead: true } : n));
+      saveQuickData(QUICK_KEYS.ATTENDANCE_NOTIFICATIONS, allNotif);
+      setNotifications((prev) => prev.map((n) => (n.id === notifId ? { ...n, isRead: true } : n)));
+      return;
+    }
+
     try {
       await updateDoc(doc(db, 'attendance_notifications', notifId), {
         isRead: true,

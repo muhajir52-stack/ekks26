@@ -11,7 +11,23 @@ import {
 } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
-import { seedInitialDatabase } from '../lib/seedData';
+import {
+  DEFAULT_ANNOUNCEMENTS,
+  DEFAULT_ATTENDANCE,
+  DEFAULT_CLASSES,
+  DEFAULT_DIGITAL_ARCHIVES,
+  DEFAULT_GRADES,
+  DEFAULT_STUDENTS,
+  DEFAULT_SUPERVISION_SCHEDULES,
+  DEFAULT_TEACHERS,
+  seedInitialDatabase,
+} from '../lib/seedData';
+import {
+  DEFAULT_QUICK_ACTIVITY_LOGS,
+  DEFAULT_QUICK_SUPERVISION_ASSESSMENTS,
+  loadQuickData,
+  QUICK_KEYS,
+} from '../lib/quickLocalStore';
 import type {
   ActivityLog,
   Announcement,
@@ -33,7 +49,7 @@ interface DashboardHomeProps {
 }
 
 export function DashboardHome({ onNavigate }: DashboardHomeProps) {
-  const { userAccount, effectiveRole } = useAuth();
+  const { userAccount, effectiveRole, isQuickSession } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<TeacherStaff[]>([]);
   const [classes, setClasses] = useState<SchoolClass[]>([]);
@@ -50,6 +66,31 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
 
   useEffect(() => {
     if (effectiveRole === 'orang_tua') return;
+
+    if (isQuickSession) {
+      setStudents(loadQuickData(QUICK_KEYS.STUDENTS, DEFAULT_STUDENTS));
+      setTeachers(loadQuickData(QUICK_KEYS.TEACHERS, DEFAULT_TEACHERS));
+      setClasses(loadQuickData(QUICK_KEYS.CLASSES, DEFAULT_CLASSES));
+      setGrades(loadQuickData(QUICK_KEYS.GRADES, DEFAULT_GRADES));
+      setAttendance(loadQuickData(QUICK_KEYS.ATTENDANCE, DEFAULT_ATTENDANCE));
+      setArchives(loadQuickData(QUICK_KEYS.DIGITAL_ARCHIVES, DEFAULT_DIGITAL_ARCHIVES));
+      setSchedules(loadQuickData(QUICK_KEYS.SUPERVISION_SCHEDULES, DEFAULT_SUPERVISION_SCHEDULES));
+      setAssessments(
+        loadQuickData(QUICK_KEYS.SUPERVISION_ASSESSMENTS, DEFAULT_QUICK_SUPERVISION_ASSESSMENTS)
+      );
+      setLogs(loadQuickData(QUICK_KEYS.ACTIVITY_LOGS, DEFAULT_QUICK_ACTIVITY_LOGS).slice(0, 8));
+      const defaultAnn: Announcement[] = DEFAULT_ANNOUNCEMENTS.map((a, idx) => ({
+        ...a,
+        id: `ann_seed_${idx + 1}`,
+        authorUid: 'system',
+      }));
+      setAnnouncements(
+        loadQuickData(QUICK_KEYS.ANNOUNCEMENTS, defaultAnn).sort((a, b) =>
+          b.publishedDate.localeCompare(a.publishedDate)
+        )
+      );
+      return;
+    }
 
     const unsubs = [
       onSnapshot(collection(db, 'students'), (s) =>
@@ -96,7 +137,7 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
       , () => {}),
     ];
     return () => unsubs.forEach((u) => u());
-  }, [effectiveRole]);
+  }, [effectiveRole, isQuickSession]);
 
   if (effectiveRole === 'orang_tua') {
     return <ParentPortalView />;
@@ -133,6 +174,7 @@ export function DashboardHome({ onNavigate }: DashboardHomeProps) {
   });
 
   const canSeed =
+    !isQuickSession &&
     (userAccount?.role === 'super_admin' || effectiveRole === 'super_admin' || effectiveRole === 'kepala_sekolah') &&
     students.length === 0;
 

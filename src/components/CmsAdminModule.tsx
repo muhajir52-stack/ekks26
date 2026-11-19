@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { useAuth } from '../context/AuthContext';
+import { QUICK_ACCOUNTS, useAuth } from '../context/AuthContext';
 import { logActivity } from '../lib/audit';
 import {
   compressImageFile,
@@ -39,7 +39,26 @@ import {
   type SiteVisualEntry,
   type SiteVisualKey,
 } from '../lib/imageUtils';
-import { DEFAULT_PUBLIC_PROFILE, seedInitialDatabase } from '../lib/seedData';
+import {
+  appendQuickActivityLog,
+  DEFAULT_QUICK_ACTIVITY_LOGS,
+  loadQuickData,
+  loadQuickRecord,
+  nextQuickId,
+  QUICK_KEYS,
+  saveQuickData,
+  saveQuickRecord,
+} from '../lib/quickLocalStore';
+import {
+  DEFAULT_ACHIEVEMENTS,
+  DEFAULT_ANNOUNCEMENTS,
+  DEFAULT_EVENTS,
+  DEFAULT_GALLERY,
+  DEFAULT_NEWS,
+  DEFAULT_PUBLIC_DIRECTORY,
+  DEFAULT_PUBLIC_PROFILE,
+  seedInitialDatabase,
+} from '../lib/seedData';
 import type {
   AcademicEvent,
   Achievement,
@@ -72,7 +91,7 @@ const SECTION_KEYS = [
 ];
 
 export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
-  const { userAccount, effectiveRole } = useAuth();
+  const { userAccount, effectiveRole, isQuickSession } = useAuth();
   const isRealAdmin = userAccount?.role === 'super_admin';
   const canManageCms = effectiveRole === 'super_admin' || effectiveRole === 'tendik';
   const canViewAudit = effectiveRole === 'super_admin' || effectiveRole === 'kepala_sekolah';
@@ -182,76 +201,187 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
 
   useEffect(() => {
     const unsubs: Array<() => void> = [];
+    const hasLocalKey = (key: string) => {
+      try {
+        return localStorage.getItem(key) !== null;
+      } catch {
+        return false;
+      }
+    };
 
     if (mode === 'cms') {
+      if (isQuickSession) {
+        const localContent = loadQuickRecord<Record<string, SchoolContent>>(
+          QUICK_KEYS.SCHOOL_CONTENT,
+          {}
+        );
+        const initialContent: Record<string, SchoolContent> = {};
+        Object.entries(DEFAULT_PUBLIC_PROFILE).forEach(([k, val]) => {
+          initialContent[k] = { id: k, ...val, updatedByUid: 'system' };
+        });
+        Object.entries(localContent).forEach(([k, val]) => {
+          initialContent[k] = val;
+        });
+        setContentDocs(initialContent);
+
+        setNews(
+          loadQuickData<NewsArticle>(
+            QUICK_KEYS.NEWS,
+            DEFAULT_NEWS.map((n, i) => ({ ...n, id: `def_n_${i}`, authorUid: 'system' }))
+          )
+        );
+        setAnnouncements(
+          loadQuickData<Announcement>(
+            QUICK_KEYS.ANNOUNCEMENTS,
+            DEFAULT_ANNOUNCEMENTS.map((a, i) => ({ ...a, id: `def_a_${i}`, authorUid: 'system' }))
+          )
+        );
+        setEvents(
+          loadQuickData<AcademicEvent>(
+            QUICK_KEYS.EVENTS,
+            DEFAULT_EVENTS.map((ev, i) => ({ ...ev, id: `def_e_${i}`, authorUid: 'system' }))
+          )
+        );
+        setAchievements(
+          loadQuickData<Achievement>(
+            QUICK_KEYS.ACHIEVEMENTS,
+            DEFAULT_ACHIEVEMENTS.map((ac, i) => ({ ...ac, id: `def_ac_${i}`, authorUid: 'system' }))
+          )
+        );
+        setGallery(
+          loadQuickData<GalleryItem>(
+            QUICK_KEYS.GALLERY,
+            DEFAULT_GALLERY.map((g, i) => ({ ...g, id: `def_g_${i}`, authorUid: 'system' }))
+          )
+        );
+        setDirectory(
+          loadQuickData<PublicDirectoryEntry>(
+            QUICK_KEYS.DIRECTORY,
+            DEFAULT_PUBLIC_DIRECTORY.map((d, i) => ({ ...d, id: `def_d_${i}`, authorUid: 'system' }))
+          )
+        );
+      }
+
       unsubs.push(
         onSnapshot(
           collection(db, 'school_content'),
           (s) => {
             const map: Record<string, SchoolContent> = {};
+            if (isQuickSession) {
+              Object.entries(DEFAULT_PUBLIC_PROFILE).forEach(([k, val]) => {
+                map[k] = { id: k, ...val, updatedByUid: 'system' };
+              });
+            }
             s.forEach((d) => {
               map[d.id] = { id: d.id, ...(d.data() as Omit<SchoolContent, 'id'>) };
             });
+            if (isQuickSession) {
+              const localContent = loadQuickRecord<Record<string, SchoolContent>>(
+                QUICK_KEYS.SCHOOL_CONTENT,
+                {}
+              );
+              Object.entries(localContent).forEach(([k, val]) => {
+                map[k] = val;
+              });
+            }
             setContentDocs(map);
           },
           () => {}
         ),
         onSnapshot(
           collection(db, 'news'),
-          (s) =>
+          (s) => {
+            if (isQuickSession && hasLocalKey(QUICK_KEYS.NEWS)) return;
+            if (isQuickSession && s.empty) return;
             setNews(
               s.docs
                 .map((d) => ({ id: d.id, ...(d.data() as Omit<NewsArticle, 'id'>) }))
                 .sort((a, b) => b.publishedDate.localeCompare(a.publishedDate))
-            ),
+            );
+          },
           () => {}
         ),
         onSnapshot(
           collection(db, 'announcements'),
-          (s) =>
+          (s) => {
+            if (isQuickSession && hasLocalKey(QUICK_KEYS.ANNOUNCEMENTS)) return;
+            if (isQuickSession && s.empty) return;
             setAnnouncements(
               s.docs
                 .map((d) => ({ id: d.id, ...(d.data() as Omit<Announcement, 'id'>) }))
                 .sort((a, b) => b.publishedDate.localeCompare(a.publishedDate))
-            ),
+            );
+          },
           () => {}
         ),
         onSnapshot(
           collection(db, 'academic_events'),
-          (s) =>
+          (s) => {
+            if (isQuickSession && hasLocalKey(QUICK_KEYS.EVENTS)) return;
+            if (isQuickSession && s.empty) return;
             setEvents(
               s.docs
                 .map((d) => ({ id: d.id, ...(d.data() as Omit<AcademicEvent, 'id'>) }))
                 .sort((a, b) => a.startDate.localeCompare(b.startDate))
-            ),
+            );
+          },
           () => {}
         ),
         onSnapshot(
           collection(db, 'achievements'),
-          (s) =>
+          (s) => {
+            if (isQuickSession && hasLocalKey(QUICK_KEYS.ACHIEVEMENTS)) return;
+            if (isQuickSession && s.empty) return;
             setAchievements(
               s.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Achievement, 'id'>) }))
-            ),
+            );
+          },
           () => {}
         ),
         onSnapshot(
           collection(db, 'gallery_items'),
-          (s) =>
-            setGallery(s.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<GalleryItem, 'id'>) }))),
+          (s) => {
+            if (isQuickSession && hasLocalKey(QUICK_KEYS.GALLERY)) return;
+            if (isQuickSession && s.empty) return;
+            setGallery(
+              s.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<GalleryItem, 'id'>) }))
+            );
+          },
           () => {}
         ),
         onSnapshot(
           collection(db, 'public_directory'),
-          (s) =>
+          (s) => {
+            if (isQuickSession && hasLocalKey(QUICK_KEYS.DIRECTORY)) return;
+            if (isQuickSession && s.empty) return;
             setDirectory(
               s.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<PublicDirectoryEntry, 'id'>) }))
-            ),
+            );
+          },
           () => {}
         )
       );
     }
 
     if (mode === 'users_audit') {
+      if (isQuickSession) {
+        if (isRealAdmin) {
+          const defaultQuickUsers: UserAccount[] = QUICK_ACCOUNTS.map((q) => ({
+            id: q.id,
+            uid: q.uid,
+            email: q.email,
+            displayName: q.displayName,
+            role: q.role,
+            activeStatus: 'aktif',
+          }));
+          setUsers(loadQuickData<UserAccount>('sims_quick_users', defaultQuickUsers));
+        }
+        if (canViewAudit) {
+          setLogs(loadQuickData<ActivityLog>(QUICK_KEYS.ACTIVITY_LOGS, DEFAULT_QUICK_ACTIVITY_LOGS));
+        }
+        return () => unsubs.forEach((u) => u());
+      }
+
       if (isRealAdmin) {
         unsubs.push(
           onSnapshot(
@@ -283,7 +413,7 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
     }
 
     return () => unsubs.forEach((u) => u());
-  }, [mode, isRealAdmin, canViewAudit]);
+  }, [mode, isRealAdmin, canViewAudit, isQuickSession]);
 
   // Sync editor form when switching sectionKey or when contentDocs loads
   useEffect(() => {
@@ -315,8 +445,7 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
 
   const handleSaveSection = async (e: React.FormEvent) => {
     e.preventDefault();
-    const uid = auth.currentUser?.uid;
-    if (!uid || !canManageCms) return;
+    if (!canManageCms) return;
     setSavingSection(true);
     try {
       const cleanedItems = sectionForm.items
@@ -327,6 +456,38 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
           value: it.value.trim(),
           description: (it.description || '').trim(),
         }));
+
+      if (isQuickSession) {
+        const updatedSection: SchoolContent = {
+          id: selectedSectionKey,
+          sectionKey: selectedSectionKey,
+          title: sectionForm.title.trim(),
+          subtitle: sectionForm.subtitle.trim(),
+          body: sectionForm.body.trim(),
+          items: cleanedItems,
+          updatedByUid: userAccount?.uid || 'quick_session',
+        };
+        const currentRecord = loadQuickRecord<Record<string, SchoolContent>>(
+          QUICK_KEYS.SCHOOL_CONTENT,
+          {}
+        );
+        const nextRecord = { ...currentRecord, [selectedSectionKey]: updatedSection };
+        saveQuickRecord(QUICK_KEYS.SCHOOL_CONTENT, nextRecord);
+        setContentDocs((prev) => ({ ...prev, [selectedSectionKey]: updatedSection }));
+        appendQuickActivityLog({
+          actorUid: userAccount?.uid,
+          actorName: userAccount?.displayName || 'Admin',
+          actorRole: effectiveRole,
+          action: 'Perbarui Konten Web Profil',
+          module: 'CMS Web Profil',
+          details: `Menyimpan bagian ${selectedSectionKey}: ${sectionForm.title}`,
+        });
+        showToast('Konten profil sekolah berhasil diperbarui dan langsung tampil di website publik.');
+        return;
+      }
+
+      const uid = auth.currentUser?.uid;
+      if (!uid) return;
 
       const ref = doc(db, 'school_content', selectedSectionKey);
       if (contentDocs[selectedSectionKey]) {
@@ -393,8 +554,7 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
 
   const handleSaveVisuals = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const uid = auth.currentUser?.uid;
-    if (!uid || !canManageCms) return;
+    if (!canManageCms) return;
     setSavingVisuals(true);
     setVisualError(null);
     try {
@@ -403,6 +563,40 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
         value: (visualForm[slot.key]?.url || '').trim(),
         description: (visualForm[slot.key]?.caption || slot.defaultCaption).trim(),
       }));
+
+      if (isQuickSession) {
+        const updatedVisuals: SchoolContent = {
+          id: 'site_visuals',
+          sectionKey: 'site_visuals',
+          title: 'Pengaturan Gambar & Identitas Visual Sekolah',
+          subtitle: 'Logo, Hero Kampus, Foto Kepala Sekolah, Banner Profil & PPDB',
+          body: 'Konfigurasi gambar resmi website profil dan portal SIMS SMA Darul Ulum Kepohbaru.',
+          items,
+          updatedByUid: userAccount?.uid || 'quick_session',
+        };
+        const currentRecord = loadQuickRecord<Record<string, SchoolContent>>(
+          QUICK_KEYS.SCHOOL_CONTENT,
+          {}
+        );
+        saveQuickRecord(QUICK_KEYS.SCHOOL_CONTENT, {
+          ...currentRecord,
+          site_visuals: updatedVisuals,
+        });
+        setContentDocs((prev) => ({ ...prev, site_visuals: updatedVisuals }));
+        appendQuickActivityLog({
+          actorUid: userAccount?.uid,
+          actorName: userAccount?.displayName || 'Admin',
+          actorRole: effectiveRole,
+          action: 'Perbarui Gambar Website',
+          module: 'Kelola Gambar Website',
+          details: 'Memperbarui konfigurasi visual/gambar resmi website dan portal SIMS.',
+        });
+        showToast('Seluruh perubahan gambar berhasil disimpan dan langsung diperbarui di website.');
+        return;
+      }
+
+      const uid = auth.currentUser?.uid;
+      if (!uid) return;
 
       const ref = doc(db, 'school_content', 'site_visuals');
       if (contentDocs.site_visuals) {
@@ -469,6 +663,33 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
     if (!editingImageTarget || !canManageCms) return;
     setSavingTargetImage(true);
     try {
+      if (isQuickSession) {
+        if (editingImageTarget.collection === 'news') {
+          const nextNews = news.map((n) =>
+            n.id === editingImageTarget.id ? { ...n, imageUrl: editingImageTarget.url.trim() } : n
+          );
+          setNews(nextNews);
+          saveQuickData(QUICK_KEYS.NEWS, nextNews);
+        } else {
+          const nextGallery = gallery.map((g) =>
+            g.id === editingImageTarget.id ? { ...g, mediaUrl: editingImageTarget.url.trim() } : g
+          );
+          setGallery(nextGallery);
+          saveQuickData(QUICK_KEYS.GALLERY, nextGallery);
+        }
+        appendQuickActivityLog({
+          actorUid: userAccount?.uid,
+          actorName: userAccount?.displayName || 'Admin',
+          actorRole: effectiveRole,
+          action: 'Ubah Gambar Konten',
+          module: 'Kelola Gambar Website',
+          details: `Memperbarui gambar untuk "${editingImageTarget.title}" (${editingImageTarget.collection}).`,
+        });
+        showToast(`Gambar "${editingImageTarget.title}" berhasil diperbarui.`);
+        setEditingImageTarget(null);
+        return;
+      }
+
       const ref = doc(db, editingImageTarget.collection, editingImageTarget.id);
       if (editingImageTarget.collection === 'news') {
         await updateDoc(ref, {
@@ -503,8 +724,45 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
 
   const handleCreateNews = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageCms || !newsForm.title.trim() || !newsForm.summary.trim()) return;
+    if (isQuickSession) {
+      const created: NewsArticle = {
+        id: nextQuickId('news'),
+        title: newsForm.title.trim(),
+        category: newsForm.category.trim(),
+        summary: newsForm.summary.trim(),
+        content: (newsForm.content || newsForm.summary).trim(),
+        imageUrl: newsForm.imageUrl.trim(),
+        publishedDate: newsForm.publishedDate,
+        authorName: userAccount?.displayName || 'Tim Humas',
+        isPublished: true,
+        authorUid: userAccount?.uid || 'quick_session',
+      };
+      const next = [created, ...news].sort((a, b) => b.publishedDate.localeCompare(a.publishedDate));
+      setNews(next);
+      saveQuickData(QUICK_KEYS.NEWS, next);
+      appendQuickActivityLog({
+        actorUid: userAccount?.uid,
+        actorName: userAccount?.displayName || 'Admin',
+        actorRole: effectiveRole,
+        action: 'Publikasi Berita Sekolah',
+        module: 'CMS Web Profil',
+        details: `Menerbitkan berita "${newsForm.title.trim()}".`,
+      });
+      setNewsForm({
+        title: '',
+        category: 'Akademik',
+        summary: '',
+        content: '',
+        imageUrl: '',
+        publishedDate: new Date().toISOString().slice(0, 10),
+      });
+      showToast('Berita sekolah berhasil dipublikasikan.');
+      return;
+    }
+
     const uid = auth.currentUser?.uid;
-    if (!uid || !newsForm.title.trim() || !newsForm.summary.trim()) return;
+    if (!uid) return;
     try {
       await addDoc(collection(db, 'news'), {
         title: newsForm.title.trim(),
@@ -542,8 +800,44 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
 
   const handleCreateAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageCms || !annForm.title.trim() || !annForm.content.trim()) return;
+    if (isQuickSession) {
+      const created: Announcement = {
+        id: nextQuickId('ann'),
+        title: annForm.title.trim(),
+        content: annForm.content.trim(),
+        audience: annForm.audience,
+        priority: annForm.priority,
+        publishedDate: annForm.publishedDate,
+        authorUid: userAccount?.uid || 'quick_session',
+        authorName: userAccount?.displayName || 'Sekretariat',
+      };
+      const next = [created, ...announcements].sort((a, b) =>
+        b.publishedDate.localeCompare(a.publishedDate)
+      );
+      setAnnouncements(next);
+      saveQuickData(QUICK_KEYS.ANNOUNCEMENTS, next);
+      appendQuickActivityLog({
+        actorUid: userAccount?.uid,
+        actorName: userAccount?.displayName || 'Admin',
+        actorRole: effectiveRole,
+        action: 'Buat Pengumuman',
+        module: 'CMS Web Profil',
+        details: `Mempublikasikan pengumuman "${annForm.title.trim()}" untuk ${annForm.audience}.`,
+      });
+      setAnnForm({
+        title: '',
+        content: '',
+        audience: 'publik',
+        priority: 'normal',
+        publishedDate: new Date().toISOString().slice(0, 10),
+      });
+      showToast('Pengumuman berhasil disimpan.');
+      return;
+    }
+
     const uid = auth.currentUser?.uid;
-    if (!uid || !annForm.title.trim() || !annForm.content.trim()) return;
+    if (!uid) return;
     try {
       await addDoc(collection(db, 'announcements'), {
         title: annForm.title.trim(),
@@ -578,8 +872,33 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
 
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageCms || !eventForm.title.trim()) return;
+    if (isQuickSession) {
+      const created: AcademicEvent = {
+        id: nextQuickId('ev'),
+        title: eventForm.title.trim(),
+        startDate: eventForm.startDate,
+        endDate: eventForm.endDate,
+        category: eventForm.category.trim(),
+        description: eventForm.description.trim(),
+        authorUid: userAccount?.uid || 'quick_session',
+      };
+      const next = [...events, created].sort((a, b) => a.startDate.localeCompare(b.startDate));
+      setEvents(next);
+      saveQuickData(QUICK_KEYS.EVENTS, next);
+      setEventForm({
+        title: '',
+        startDate: new Date().toISOString().slice(0, 10),
+        endDate: new Date().toISOString().slice(0, 10),
+        category: 'Akademik',
+        description: '',
+      });
+      showToast('Agenda kalender akademik berhasil ditambahkan.');
+      return;
+    }
+
     const uid = auth.currentUser?.uid;
-    if (!uid || !eventForm.title.trim()) return;
+    if (!uid) return;
     try {
       await addDoc(collection(db, 'academic_events'), {
         title: eventForm.title.trim(),
@@ -606,8 +925,35 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
 
   const handleCreateAchievement = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageCms || !achForm.title.trim() || !achForm.recipientName.trim()) return;
+    if (isQuickSession) {
+      const created: Achievement = {
+        id: nextQuickId('ach'),
+        title: achForm.title.trim(),
+        recipientName: achForm.recipientName.trim(),
+        level: achForm.level,
+        year: achForm.year.trim(),
+        category: achForm.category.trim(),
+        description: achForm.description.trim(),
+        authorUid: userAccount?.uid || 'quick_session',
+      };
+      const next = [created, ...achievements];
+      setAchievements(next);
+      saveQuickData(QUICK_KEYS.ACHIEVEMENTS, next);
+      setAchForm({
+        title: '',
+        recipientName: '',
+        level: 'Kabupaten',
+        year: '2026',
+        category: 'Akademik',
+        description: '',
+      });
+      showToast('Data prestasi siswa/sekolah berhasil ditambahkan.');
+      return;
+    }
+
     const uid = auth.currentUser?.uid;
-    if (!uid || !achForm.title.trim() || !achForm.recipientName.trim()) return;
+    if (!uid) return;
     try {
       await addDoc(collection(db, 'achievements'), {
         title: achForm.title.trim(),
@@ -636,8 +982,35 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
 
   const handleCreateGallery = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageCms || !galForm.title.trim() || !galForm.caption.trim()) return;
+    if (isQuickSession) {
+      const created: GalleryItem = {
+        id: nextQuickId('gal'),
+        title: galForm.title.trim(),
+        mediaType: galForm.mediaType,
+        category: galForm.category.trim(),
+        caption: galForm.caption.trim(),
+        mediaUrl: galForm.mediaUrl.trim(),
+        eventDate: galForm.eventDate,
+        authorUid: userAccount?.uid || 'quick_session',
+      };
+      const next = [created, ...gallery];
+      setGallery(next);
+      saveQuickData(QUICK_KEYS.GALLERY, next);
+      setGalForm({
+        title: '',
+        mediaType: 'foto',
+        category: 'Kegiatan Sekolah',
+        caption: '',
+        mediaUrl: '',
+        eventDate: new Date().toISOString().slice(0, 10),
+      });
+      showToast('Item galeri berhasil ditambahkan.');
+      return;
+    }
+
     const uid = auth.currentUser?.uid;
-    if (!uid || !galForm.title.trim() || !galForm.caption.trim()) return;
+    if (!uid) return;
     try {
       await addDoc(collection(db, 'gallery_items'), {
         title: galForm.title.trim(),
@@ -666,8 +1039,27 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
 
   const handleCreateDirectory = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageCms || !dirForm.name.trim() || !dirForm.position.trim()) return;
+    if (isQuickSession) {
+      const created: PublicDirectoryEntry = {
+        id: nextQuickId('dir'),
+        name: dirForm.name.trim(),
+        roleType: dirForm.roleType,
+        position: dirForm.position.trim(),
+        subject: dirForm.subject.trim(),
+        education: dirForm.education.trim(),
+        authorUid: userAccount?.uid || 'quick_session',
+      };
+      const next = [...directory, created];
+      setDirectory(next);
+      saveQuickData(QUICK_KEYS.DIRECTORY, next);
+      setDirForm({ name: '', roleType: 'guru', position: '', subject: '', education: '' });
+      showToast('Entri direktori guru/tendik publik berhasil ditambahkan.');
+      return;
+    }
+
     const uid = auth.currentUser?.uid;
-    if (!uid || !dirForm.name.trim() || !dirForm.position.trim()) return;
+    if (!uid) return;
     try {
       await addDoc(collection(db, 'public_directory'), {
         name: dirForm.name.trim(),
@@ -687,6 +1079,44 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
   };
 
   const handleDeleteDoc = async (colName: string, id: string, label: string) => {
+    if (isQuickSession) {
+      if (colName === 'news') {
+        const next = news.filter((item) => item.id !== id);
+        setNews(next);
+        saveQuickData(QUICK_KEYS.NEWS, next);
+      } else if (colName === 'announcements') {
+        const next = announcements.filter((item) => item.id !== id);
+        setAnnouncements(next);
+        saveQuickData(QUICK_KEYS.ANNOUNCEMENTS, next);
+      } else if (colName === 'academic_events') {
+        const next = events.filter((item) => item.id !== id);
+        setEvents(next);
+        saveQuickData(QUICK_KEYS.EVENTS, next);
+      } else if (colName === 'achievements') {
+        const next = achievements.filter((item) => item.id !== id);
+        setAchievements(next);
+        saveQuickData(QUICK_KEYS.ACHIEVEMENTS, next);
+      } else if (colName === 'gallery_items') {
+        const next = gallery.filter((item) => item.id !== id);
+        setGallery(next);
+        saveQuickData(QUICK_KEYS.GALLERY, next);
+      } else if (colName === 'public_directory') {
+        const next = directory.filter((item) => item.id !== id);
+        setDirectory(next);
+        saveQuickData(QUICK_KEYS.DIRECTORY, next);
+      }
+      appendQuickActivityLog({
+        actorUid: userAccount?.uid,
+        actorName: userAccount?.displayName || 'Admin',
+        actorRole: effectiveRole,
+        action: 'Hapus Item CMS',
+        module: 'CMS Web Profil',
+        details: `Menghapus "${label}" dari koleksi ${colName}.`,
+      });
+      showToast(`"${label}" dihapus.`);
+      return;
+    }
+
     try {
       await deleteDoc(doc(db, colName, id));
       await logActivity({
@@ -704,6 +1134,22 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
 
   const handleUpdateUserRole = async (targetUser: UserAccount, newRole: UserRole) => {
     if (!isRealAdmin) return;
+    if (isQuickSession) {
+      const next = users.map((u) => (u.id === targetUser.id ? { ...u, role: newRole } : u));
+      setUsers(next);
+      saveQuickData('sims_quick_users', next);
+      appendQuickActivityLog({
+        actorUid: userAccount?.uid,
+        actorName: userAccount?.displayName || 'Super Admin',
+        actorRole: 'super_admin',
+        action: 'Ubah Peran Pengguna',
+        module: 'Manajemen Akun & RBAC',
+        details: `Peran ${targetUser.email} diubah menjadi ${ROLE_LABELS[newRole]}.`,
+      });
+      showToast(`Peran ${targetUser.displayName} diperbarui ke ${ROLE_LABELS[newRole]}.`);
+      return;
+    }
+
     try {
       await updateDoc(doc(db, 'users', targetUser.id), {
         role: newRole,
@@ -724,7 +1170,26 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
 
   const handleToggleUserStatus = async (targetUser: UserAccount) => {
     if (!isRealAdmin) return;
-    const nextStatus = targetUser.activeStatus === 'aktif' ? 'nonaktif' : 'aktif';
+    const nextStatus: UserAccount['activeStatus'] =
+      targetUser.activeStatus === 'aktif' ? 'nonaktif' : 'aktif';
+    if (isQuickSession) {
+      const next = users.map((u) =>
+        u.id === targetUser.id ? { ...u, activeStatus: nextStatus } : u
+      );
+      setUsers(next);
+      saveQuickData('sims_quick_users', next);
+      appendQuickActivityLog({
+        actorUid: userAccount?.uid,
+        actorName: userAccount?.displayName || 'Super Admin',
+        actorRole: 'super_admin',
+        action: 'Ubah Status Akun',
+        module: 'Manajemen Akun & RBAC',
+        details: `Status akun ${targetUser.email} diubah menjadi ${nextStatus}.`,
+      });
+      showToast(`Status akun ${targetUser.displayName} kini ${nextStatus}.`);
+      return;
+    }
+
     try {
       await updateDoc(doc(db, 'users', targetUser.id), {
         activeStatus: nextStatus,
@@ -747,6 +1212,40 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
     if (!isRealAdmin) return;
     setSeeding(true);
     try {
+      if (isQuickSession) {
+        Object.values(QUICK_KEYS).forEach((key) => {
+          try {
+            localStorage.removeItem(key);
+          } catch {
+            // ignore
+          }
+        });
+        try {
+          localStorage.removeItem('sims_quick_users');
+        } catch {
+          // ignore
+        }
+        const defaultQuickUsers: UserAccount[] = QUICK_ACCOUNTS.map((q) => ({
+          id: q.id,
+          uid: q.uid,
+          email: q.email,
+          displayName: q.displayName,
+          role: q.role,
+          activeStatus: 'aktif',
+        }));
+        setUsers(defaultQuickUsers);
+        setLogs(DEFAULT_QUICK_ACTIVITY_LOGS);
+        appendQuickActivityLog({
+          actorUid: userAccount?.uid,
+          actorName: userAccount?.displayName || 'Super Administrator',
+          actorRole: 'super_admin',
+          action: 'Pemulihan Data Master Lokal',
+          module: 'Sistem Inti',
+          details: 'Memulihkan seluruh data master lokal pada sesi akun langsung.',
+        });
+        showToast('Seluruh data master lokal pada sesi akun langsung telah dipulihkan ke bawaan.');
+        return;
+      }
       const res = await seedInitialDatabase(userAccount?.displayName || 'Super Administrator');
       showToast(res.message);
     } catch (e) {

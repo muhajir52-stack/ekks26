@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
+  getRedirectResult,
   onAuthStateChanged,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
   type User as FirebaseUser,
 } from 'firebase/auth';
@@ -14,9 +16,120 @@ import {
 } from 'firebase/firestore';
 import { auth, db, googleAuthProvider, handleFirestoreError, OperationType } from '../lib/firebase';
 import type { UserAccount, UserRole } from '../types/sims';
+import { ROLE_LABELS } from '../types/sims';
 import { logActivity } from '../lib/audit';
+import { appendQuickActivityLog } from '../lib/quickLocalStore';
 
 const BOOTSTRAPPED_ADMIN_EMAIL = 'muhajir52@guru.sma.belajar.id';
+const QUICK_SESSION_STORAGE_KEY = 'sims_quick_account_id';
+
+export interface QuickAccountOption {
+  id: string;
+  uid: string;
+  displayName: string;
+  email: string;
+  role: UserRole;
+  unitLabel: string;
+  accessSummary: string;
+}
+
+export const QUICK_ACCOUNTS: QuickAccountOption[] = [
+  {
+    id: 'qa_super_admin',
+    uid: 'qa_super_admin',
+    displayName: 'Muhajir, S.Pd., M.Pd.',
+    email: 'muhajir52@guru.sma.belajar.id',
+    role: 'super_admin',
+    unitLabel: 'Waka Kurikulum · Administrator Utama',
+    accessSummary: 'Akses penuh seluruh modul, CMS Web, Kelola Gambar & Audit Log',
+  },
+  {
+    id: 'qa_kepsek',
+    uid: 'qa_kepsek',
+    displayName: 'Drs. H. Abdul Aziz, M.Pd.',
+    email: 'kepsek@smadukepohbaru.sch.id',
+    role: 'kepala_sekolah',
+    unitLabel: 'Pimpinan Institusi',
+    accessSummary: 'Monitoring akademik, persetujuan supervisi 88 butir & arsip',
+  },
+  {
+    id: 'qa_supervisor',
+    uid: 'qa_supervisor',
+    displayName: 'Tim Supervisor Mutu',
+    email: 'supervisor@smadukepohbaru.sch.id',
+    role: 'supervisor',
+    unitLabel: 'Penjaminan Mutu & Pengawas',
+    accessSummary: 'Penilaian supervisi digital 8 aspek (88 butir) & rekap skor',
+  },
+  {
+    id: 'qa_guru',
+    uid: 'qa_guru',
+    displayName: 'Siti Aminah, S.Pd.',
+    email: 'aminah@smadukepohbaru.sch.id',
+    role: 'guru',
+    unitLabel: 'Pendidik & Wali Kelas XI IPA 1',
+    accessSummary: 'Input nilai siswa, absensi kelas, notifikasi & arsip ajar',
+  },
+  {
+    id: 'qa_tendik',
+    uid: 'qa_tendik',
+    displayName: 'Nurul Hidayah, S.E.',
+    email: 'tu@smadukepohbaru.sch.id',
+    role: 'tendik',
+    unitLabel: 'Kepala Tata Usaha & Humas',
+    accessSummary: 'Data induk siswa/GTK, arsip digital, CMS Web & Kelola Gambar',
+  },
+  {
+    id: 'qa_ortu',
+    uid: 'qa_ortu',
+    displayName: 'H. Abdullah Hakim',
+    email: 'hakim.wali@gmail.com',
+    role: 'orang_tua',
+    unitLabel: 'Wali dari Ahmad Fauzan Hakim (XI IPA 1)',
+    accessSummary: 'Portal Orang Tua: rekap nilai, kehadiran & notifikasi sekolah',
+  },
+];
+
+function toUserAccount(option: QuickAccountOption): UserAccount {
+  return {
+    id: option.id,
+    uid: option.uid,
+    email: option.email,
+    displayName: option.displayName,
+    role: option.role,
+    activeStatus: 'aktif',
+  };
+}
+
+function getStoredQuickAccount(): QuickAccountOption | null {
+  try {
+    const savedId = localStorage.getItem(QUICK_SESSION_STORAGE_KEY);
+    if (!savedId) return null;
+    return QUICK_ACCOUNTS.find((q) => q.id === savedId) || null;
+  } catch {
+    return null;
+  }
+}
+
+function formatGoogleAuthError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : 'Gagal masuk dengan Google.';
+  const code = typeof err === 'object' && err !== null && 'code' in err ? String((err as { code?: string }).code) : '';
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+
+  if (code === 'auth/unauthorized-domain' || raw.includes('auth/unauthorized-domain')) {
+    return `Domain aplikasi terpublikasi ("${hostname}") belum diizinkan pada Firebase Authentication (Authorized Domains). Gunakan Menu Akun Masuk Langsung di bawah untuk langsung masuk ke dasbor.`;
+  }
+  if (code === 'auth/popup-closed-by-user') {
+    return 'Jendela masuk Google ditutup sebelum proses selesai. Anda dapat mencoba lagi atau memilih Akun Masuk Langsung di bawah.';
+  }
+  if (code === 'auth/popup-blocked') {
+    return 'Pop-up diblokir oleh peramban. Mengalihkan ke halaman masuk Google atau gunakan Akun Masuk Langsung di bawah.';
+  }
+  if (code === 'auth/operation-not-supported-in-this-environment') {
+    return 'Lingkungan pratinjau/iframe membatasi autentikasi Google pop-up. Silakan gunakan Menu Akun Masuk Langsung di bawah untuk masuk ke dasbor.';
+  }
+  return raw;
+}
 
 interface AuthContextValue {
   firebaseUser: FirebaseUser | null;
@@ -27,6 +140,10 @@ interface AuthContextValue {
   authReady: boolean;
   signingIn: boolean;
   authError: string | null;
+  isQuickSession: boolean;
+  quickAccounts: QuickAccountOption[];
+  activeQuickAccountId: string | null;
+  loginWithQuickAccount: (accountId: string) => void;
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -35,7 +152,10 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
-  const [userAccount, setUserAccount] = useState<UserAccount | null>(null);
+  const [cloudUserAccount, setCloudUserAccount] = useState<UserAccount | null>(null);
+  const [quickAccount, setQuickAccount] = useState<QuickAccountOption | null>(() =>
+    getStoredQuickAccount()
+  );
   const [previewRole, setPreviewRole] = useState<UserRole | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
@@ -43,6 +163,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let unsubUserDoc: (() => void) | null = null;
+
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (result?.user) {
+          try {
+            localStorage.removeItem(QUICK_SESSION_STORAGE_KEY);
+          } catch {
+            // ignore
+          }
+          setQuickAccount(null);
+          await logActivity({
+            actorName: result.user.displayName || result.user.email || 'Pengguna',
+            actorRole:
+              result.user.email?.toLowerCase() === BOOTSTRAPPED_ADMIN_EMAIL
+                ? 'super_admin'
+                : 'pengguna',
+            action: 'Login Berhasil',
+            module: 'Autentikasi',
+            details: `Masuk melalui Google Sign-In Redirect (${result.user.email}).`,
+          });
+        }
+      })
+      .catch((err) => {
+        setAuthError(formatGoogleAuthError(err));
+      });
 
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
       if (unsubUserDoc) {
@@ -52,11 +197,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setFirebaseUser(user);
 
       if (!user) {
-        setUserAccount(null);
-        setPreviewRole(null);
+        setCloudUserAccount(null);
         setAuthReady(true);
         return;
       }
+
+      try {
+        localStorage.removeItem(QUICK_SESSION_STORAGE_KEY);
+      } catch {
+        // ignore
+      }
+      setQuickAccount(null);
 
       const userRef = doc(db, 'users', user.uid);
       try {
@@ -90,7 +241,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         userRef,
         (snapshot) => {
           if (snapshot.exists()) {
-            setUserAccount({
+            setCloudUserAccount({
               id: snapshot.id,
               ...(snapshot.data() as Omit<UserAccount, 'id'>),
             });
@@ -109,11 +260,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const loginWithQuickAccount = (accountId: string) => {
+    const chosen = QUICK_ACCOUNTS.find((q) => q.id === accountId);
+    if (!chosen) return;
+    try {
+      localStorage.setItem(QUICK_SESSION_STORAGE_KEY, chosen.id);
+    } catch {
+      // ignore
+    }
+    setQuickAccount(chosen);
+    setPreviewRole(null);
+    setAuthError(null);
+    appendQuickActivityLog({
+      actorUid: chosen.uid,
+      actorName: chosen.displayName,
+      actorRole: chosen.role,
+      action: 'Masuk Akun Langsung',
+      module: 'Autentikasi',
+      details: `Masuk langsung ke dasbor sebagai ${ROLE_LABELS[chosen.role]} (${chosen.email}).`,
+    });
+  };
+
   const signInWithGoogle = async () => {
     setSigningIn(true);
     setAuthError(null);
     try {
       const result = await signInWithPopup(auth, googleAuthProvider);
+      try {
+        localStorage.removeItem(QUICK_SESSION_STORAGE_KEY);
+      } catch {
+        // ignore
+      }
+      setQuickAccount(null);
       await logActivity({
         actorName: result.user.displayName || result.user.email || 'Pengguna',
         actorRole:
@@ -125,27 +303,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         details: `Masuk melalui Google Sign-In (${result.user.email}).`,
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Gagal masuk dengan Google.';
-      setAuthError(msg);
+      const code =
+        typeof err === 'object' && err !== null && 'code' in err
+          ? String((err as { code?: string }).code)
+          : '';
+      if (code === 'auth/popup-blocked') {
+        try {
+          await signInWithRedirect(auth, googleAuthProvider);
+          return;
+        } catch (redirectErr) {
+          setAuthError(formatGoogleAuthError(redirectErr));
+        }
+      } else {
+        setAuthError(formatGoogleAuthError(err));
+      }
     } finally {
       setSigningIn(false);
     }
   };
 
   const logout = async () => {
-    if (userAccount) {
+    const activeAcc = cloudUserAccount || (quickAccount ? toUserAccount(quickAccount) : null);
+    if (firebaseUser && activeAcc) {
       await logActivity({
-        actorName: userAccount.displayName,
-        actorRole: userAccount.role,
+        actorName: activeAcc.displayName,
+        actorRole: activeAcc.role,
         action: 'Logout',
         module: 'Autentikasi',
-        details: `Keluar dari sesi (${userAccount.email}).`,
+        details: `Keluar dari sesi (${activeAcc.email}).`,
+      });
+    } else if (activeAcc) {
+      appendQuickActivityLog({
+        actorUid: activeAcc.uid,
+        actorName: activeAcc.displayName,
+        actorRole: activeAcc.role,
+        action: 'Logout',
+        module: 'Autentikasi',
+        details: `Keluar dari sesi akun langsung (${activeAcc.email}).`,
       });
     }
+    try {
+      localStorage.removeItem(QUICK_SESSION_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+    setQuickAccount(null);
     setPreviewRole(null);
-    await signOut(auth);
+    if (auth.currentUser) {
+      await signOut(auth);
+    }
   };
 
+  const isQuickSession = !firebaseUser && quickAccount !== null;
+  const userAccount: UserAccount | null = cloudUserAccount || (quickAccount ? toUserAccount(quickAccount) : null);
   const actualRole: UserRole = userAccount?.role || 'orang_tua';
   const effectiveRole: UserRole =
     actualRole === 'super_admin' && previewRole ? previewRole : actualRole;
@@ -161,6 +371,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         authReady,
         signingIn,
         authError,
+        isQuickSession,
+        quickAccounts: QUICK_ACCOUNTS,
+        activeQuickAccountId: quickAccount?.id || null,
+        loginWithQuickAccount,
         signInWithGoogle,
         logout,
       }}

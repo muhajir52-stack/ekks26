@@ -13,6 +13,7 @@ import {
   Globe,
   GraduationCap,
   Image,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -24,6 +25,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { db } from './lib/firebase';
 import { isRenderableImageUrl, parseSiteVisuals } from './lib/imageUtils';
+import { loadQuickRecord, QUICK_KEYS } from './lib/quickLocalStore';
 import { PublicPortal } from './components/PublicPortal';
 import { DashboardHome } from './components/DashboardHome';
 import { ParentPortalView } from './components/ParentPortalView';
@@ -100,7 +102,6 @@ const NAV_ITEMS: NavConfig[] = [
 
 function SimsShell() {
   const {
-    firebaseUser,
     userAccount,
     effectiveRole,
     previewRole,
@@ -108,6 +109,10 @@ function SimsShell() {
     authReady,
     signingIn,
     authError,
+    isQuickSession,
+    quickAccounts,
+    activeQuickAccountId,
+    loginWithQuickAccount,
     signInWithGoogle,
     logout,
   } = useAuth();
@@ -123,9 +128,18 @@ function SimsShell() {
   );
 
   useEffect(() => {
+    const localContent = loadQuickRecord<Record<string, SchoolContent>>(QUICK_KEYS.SCHOOL_CONTENT, {});
+    if (localContent.site_visuals) {
+      setSchoolLogoUrl(parseSiteVisuals(localContent.site_visuals).logo_sekolah.url);
+    }
     const unsub = onSnapshot(
       doc(db, 'school_content', 'site_visuals'),
       (snap) => {
+        const localOverride = loadQuickRecord<Record<string, SchoolContent>>(QUICK_KEYS.SCHOOL_CONTENT, {});
+        if (localOverride.site_visuals) {
+          setSchoolLogoUrl(parseSiteVisuals(localOverride.site_visuals).logo_sekolah.url);
+          return;
+        }
         if (snap.exists()) {
           const parsed = parseSiteVisuals(snap.data() as SchoolContent);
           setSchoolLogoUrl(parsed.logo_sekolah.url);
@@ -136,7 +150,7 @@ function SimsShell() {
       () => {}
     );
     return () => unsub();
-  }, []);
+  }, [activeSection]);
 
   useEffect(() => {
     if (allowedNavItems.length === 0) return;
@@ -149,8 +163,12 @@ function SimsShell() {
   if (viewMode === 'public') {
     return (
       <PublicPortal
-        isAuthenticated={Boolean(firebaseUser)}
+        isAuthenticated={Boolean(userAccount)}
         onOpenPortal={() => setViewMode('portal')}
+        onQuickLogin={(accountId) => {
+          loginWithQuickAccount(accountId);
+          setViewMode('portal');
+        }}
       />
     );
   }
@@ -165,51 +183,97 @@ function SimsShell() {
     );
   }
 
-  if (!firebaseUser || !userAccount) {
+  if (!userAccount) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
-        <div className="max-w-md w-full bg-white border border-slate-200 rounded-2xl p-8 space-y-6 shadow-sm">
-          <button
-            type="button"
-            onClick={() => setViewMode('public')}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-emerald-900"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> Kembali ke Website Profil Sekolah
-          </button>
-
-          <div className="space-y-2">
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 sm:p-6">
+        <div className="max-w-4xl w-full bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 space-y-6 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => setViewMode('public')}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-emerald-900"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Kembali ke Website Profil Sekolah
+            </button>
             <div className="text-xs font-semibold tracking-wider uppercase text-emerald-800">
               Portal Terpadu · Kepohbaru, Bojonegoro
             </div>
+          </div>
+
+          <div className="space-y-1.5">
             <h1 className="text-2xl font-editorial font-semibold text-slate-950">
-              Masuk ke SIMS SMA Darul Ulum Kepohbaru
+              Masuk ke Dasbor SIMS SMA Darul Ulum Kepohbaru
             </h1>
             <p className="text-sm text-slate-600 leading-relaxed">
-              Akses terpusat untuk Kepala Sekolah, Guru, Wali Kelas, Tenaga Kependidikan,
-              Supervisor, dan Orang Tua / Wali Siswa dengan hak akses berbasis peran (RBAC).
+              Pilih salah satu akun pada Menu Akun Masuk Langsung untuk langsung mengakses dasbor
+              tanpa kendala domain terpublikasi, atau gunakan Akun Google institusi Anda.
             </p>
           </div>
 
           {authError && (
-            <div className="bg-red-50 border border-red-200 text-red-800 text-xs rounded-lg p-3">
+            <div className="bg-red-50 border border-red-200 text-red-800 text-xs rounded-lg p-3 leading-relaxed">
               {authError}
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={signInWithGoogle}
-            disabled={signingIn}
-            className="w-full py-3 px-4 bg-emerald-800 hover:bg-emerald-900 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-60"
-          >
-            {signingIn ? 'Menghubungkan Akun Google...' : 'Masuk dengan Akun Google'}
-          </button>
-
-          <div className="border-t border-slate-200 pt-4 text-xs text-slate-500 space-y-1">
-            <div>Perlindungan Keamanan: Autentikasi Google & Otorisasi 7 Peran RBAC</div>
-            <div>
-              Orang tua baru dapat langsung memantau anak setelah email Google ditautkan pada master siswa.
+          {/* Menu Akun Masuk Langsung ke Dasbor */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <KeyRound className="w-4 h-4 text-emerald-800" />
+                <span>Menu Akun Masuk Langsung ke Dasbor</span>
+              </div>
+              <span className="text-xs text-slate-500">1 klik langsung buka dasbor</span>
             </div>
+
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {quickAccounts.map((acc) => (
+                <button
+                  key={acc.id}
+                  type="button"
+                  onClick={() => loginWithQuickAccount(acc.id)}
+                  className="text-left border border-slate-200 hover:border-emerald-700 hover:bg-emerald-50/40 rounded-xl p-4 transition-colors flex flex-col justify-between gap-3 group"
+                >
+                  <div className="space-y-1">
+                    <div className="text-xs font-semibold text-emerald-800">
+                      {ROLE_LABELS[acc.role]}
+                    </div>
+                    <div className="text-sm font-semibold text-slate-950">
+                      {acc.displayName}
+                    </div>
+                    <div className="text-[11px] font-mono text-slate-500 truncate">
+                      {acc.email}
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed pt-1">
+                      {acc.accessSummary}
+                    </p>
+                  </div>
+                  <div className="text-xs font-semibold text-emerald-800 group-hover:underline">
+                    Masuk ke Dasbor →
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Google Sign-In Alternatif */}
+          <div className="border-t border-slate-200 pt-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="text-xs text-slate-500 space-y-0.5">
+              <div className="font-semibold text-slate-700">
+                Autentikasi Cloud Google & 7 Peran RBAC
+              </div>
+              <div>
+                Gunakan tombol di samping apabila domain aplikasi telah terdaftar pada Firebase Authentication.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={signInWithGoogle}
+              disabled={signingIn}
+              className="px-5 py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-semibold rounded-xl transition-colors disabled:opacity-60 whitespace-nowrap shrink-0"
+            >
+              {signingIn ? 'Menghubungkan Akun Google...' : 'Masuk dengan Akun Google'}
+            </button>
           </div>
         </div>
       </div>
@@ -381,7 +445,32 @@ function SimsShell() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2.5 shrink-0">
+            {isQuickSession && (
+              <>
+                <select
+                  aria-label="Ganti Akun Masuk Langsung"
+                  value={activeQuickAccountId || 'qa_super_admin'}
+                  onChange={(e) => loginWithQuickAccount(e.target.value)}
+                  className="px-2.5 py-1.5 text-xs border border-emerald-300 rounded-lg bg-emerald-50 text-emerald-950 font-medium max-w-[200px]"
+                >
+                  {quickAccounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      Akun: {ROLE_LABELS[acc.role]}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={signInWithGoogle}
+                  disabled={signingIn}
+                  className="hidden sm:inline-flex items-center px-3 py-1.5 text-xs font-semibold text-emerald-900 border border-emerald-300 bg-white rounded-lg hover:bg-emerald-50 whitespace-nowrap shrink-0"
+                >
+                  {signingIn ? 'Menghubungkan...' : 'Hubungkan Google'}
+                </button>
+              </>
+            )}
+
             {userAccount.role === 'super_admin' && (
               <select
                 aria-label="Pratinjau Peran RBAC"
@@ -390,7 +479,7 @@ function SimsShell() {
                   const val = e.target.value as UserRole;
                   setPreviewRole(val === 'super_admin' ? null : val);
                 }}
-                className="px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-slate-50 text-slate-800 font-medium"
+                className="hidden md:block px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-slate-50 text-slate-800 font-medium"
               >
                 {(Object.keys(ROLE_LABELS) as UserRole[]).map((r) => (
                   <option key={r} value={r}>
@@ -409,6 +498,16 @@ function SimsShell() {
             </button>
           </div>
         </header>
+
+        {isQuickSession && (
+          <div className="bg-amber-50 border-b border-amber-200 px-4 sm:px-6 py-2 text-xs text-amber-950 flex flex-wrap items-center justify-between gap-2">
+            <span>
+              Anda sedang masuk melalui <strong>Akun Langsung ({ROLE_LABELS[effectiveRole]})</strong>.
+              Seluruh perubahan data di sesi ini tersimpan secara lokal di peramban Anda.
+            </span>
+            {authError && <span className="text-red-700 font-medium">{authError}</span>}
+          </div>
+        )}
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
           {renderSection()}

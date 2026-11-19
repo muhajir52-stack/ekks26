@@ -22,6 +22,21 @@ import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 import { logActivity } from '../lib/audit';
 import {
+  DEFAULT_ACADEMIC_YEARS,
+  DEFAULT_CLASSES,
+  DEFAULT_GRADES,
+  DEFAULT_STUDENTS,
+  DEFAULT_SUBJECTS,
+  DEFAULT_TEACHERS,
+} from '../lib/seedData';
+import {
+  appendQuickActivityLog,
+  loadQuickData,
+  nextQuickId,
+  QUICK_KEYS,
+  saveQuickData,
+} from '../lib/quickLocalStore';
+import {
   exportGradesToExcel,
   exportGradesToPDF,
   exportStudentsToExcel,
@@ -41,7 +56,7 @@ import type {
 type AcademicTab = 'students' | 'teachers' | 'structure' | 'grades';
 
 export function AcademicModule() {
-  const { userAccount, effectiveRole } = useAuth();
+  const { userAccount, effectiveRole, isQuickSession } = useAuth();
   const [tab, setTab] = useState<AcademicTab>('students');
 
   const [students, setStudents] = useState<Student[]>([]);
@@ -104,6 +119,16 @@ export function AcademicModule() {
   const canManageGrades = ['super_admin', 'kepala_sekolah', 'guru', 'wali_kelas'].includes(effectiveRole);
 
   useEffect(() => {
+    if (isQuickSession) {
+      setStudents(loadQuickData(QUICK_KEYS.STUDENTS, DEFAULT_STUDENTS));
+      setTeachers(loadQuickData(QUICK_KEYS.TEACHERS, DEFAULT_TEACHERS));
+      setClasses(loadQuickData(QUICK_KEYS.CLASSES, DEFAULT_CLASSES));
+      setSubjects(loadQuickData(QUICK_KEYS.SUBJECTS, DEFAULT_SUBJECTS));
+      setAcademicYears(loadQuickData(QUICK_KEYS.ACADEMIC_YEARS, DEFAULT_ACADEMIC_YEARS));
+      setGrades(loadQuickData(QUICK_KEYS.GRADES, DEFAULT_GRADES));
+      return;
+    }
+
     const unsubs = [
       onSnapshot(collection(db, 'students'), (s) =>
         setStudents(s.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Student, 'id'>) })))
@@ -125,7 +150,7 @@ export function AcademicModule() {
       , (e) => handleFirestoreError(e, OperationType.LIST, 'grades')),
     ];
     return () => unsubs.forEach((u) => u());
-  }, []);
+  }, [isQuickSession]);
 
   const activeYearName = academicYears.find((y) => y.isActive)?.name || '2026/2027';
 
@@ -180,6 +205,40 @@ export function AcademicModule() {
       previousSchool: studentForm.previousSchool.trim(),
     };
 
+    if (isQuickSession) {
+      let nextList: Student[];
+      if (editingStudent) {
+        nextList = students.map((st) =>
+          st.id === editingStudent.id ? { ...st, ...payload } : st
+        );
+        appendQuickActivityLog({
+          actorUid: uid,
+          actorName: userAccount.displayName,
+          actorRole: effectiveRole,
+          action: 'Perbarui Data Siswa',
+          module: 'Akademik',
+          details: `Memperbarui data siswa ${payload.name} (${payload.nis}).`,
+        });
+        setFeedback(`Data siswa ${payload.name} berhasil diperbarui.`);
+      } else {
+        const created: Student = { id: nextQuickId('std'), ...payload, authorUid: uid };
+        nextList = [created, ...students];
+        appendQuickActivityLog({
+          actorUid: uid,
+          actorName: userAccount.displayName,
+          actorRole: effectiveRole,
+          action: 'Tambah Siswa Baru',
+          module: 'Akademik',
+          details: `Menambahkan siswa ${payload.name} ke kelas ${payload.className}.`,
+        });
+        setFeedback(`Siswa ${payload.name} berhasil ditambahkan.`);
+      }
+      setStudents(nextList);
+      saveQuickData(QUICK_KEYS.STUDENTS, nextList);
+      setShowStudentModal(false);
+      return;
+    }
+
     try {
       if (editingStudent) {
         await updateDoc(doc(db, 'students', editingStudent.id), {
@@ -217,6 +276,22 @@ export function AcademicModule() {
   };
 
   const handleDeleteStudent = async (s: Student) => {
+    if (isQuickSession) {
+      const nextList = students.filter((st) => st.id !== s.id);
+      setStudents(nextList);
+      saveQuickData(QUICK_KEYS.STUDENTS, nextList);
+      appendQuickActivityLog({
+        actorUid: userAccount?.uid,
+        actorName: userAccount?.displayName || 'Admin',
+        actorRole: effectiveRole,
+        action: 'Hapus Data Siswa',
+        module: 'Akademik',
+        details: `Menghapus data siswa ${s.name} (${s.nis}).`,
+      });
+      setFeedback(`Data siswa ${s.name} dihapus.`);
+      return;
+    }
+
     try {
       await deleteDoc(doc(db, 'students', s.id));
       await logActivity({
@@ -236,6 +311,41 @@ export function AcademicModule() {
     if (!file || !userAccount) return;
     try {
       const parsed = await parseStudentsFromExcel(file);
+      if (isQuickSession) {
+        const added: Student[] = parsed.map((row) => {
+          const cls = classes.find((c) => c.name.toLowerCase() === row.className.toLowerCase()) || classes[0];
+          return {
+            id: nextQuickId('std'),
+            nis: row.nis,
+            nisn: row.nisn || row.nis,
+            name: row.name,
+            gender: row.gender,
+            classId: cls?.id || 'cls_x_a',
+            className: cls?.name || row.className,
+            academicYearName: activeYearName,
+            status: 'aktif',
+            parentName: row.parentName,
+            parentEmail: row.parentEmail,
+            previousSchool: row.previousSchool,
+            authorUid: userAccount.uid,
+          };
+        });
+        const nextList = [...added, ...students];
+        setStudents(nextList);
+        saveQuickData(QUICK_KEYS.STUDENTS, nextList);
+        setFeedback(`Berhasil mengimpor ${added.length} data siswa dari Excel.`);
+        appendQuickActivityLog({
+          actorUid: userAccount.uid,
+          actorName: userAccount.displayName,
+          actorRole: effectiveRole,
+          action: 'Impor Excel Siswa',
+          module: 'Akademik',
+          details: `Mengimpor ${added.length} siswa dari berkas ${file.name}.`,
+        });
+        e.target.value = '';
+        return;
+      }
+
       let count = 0;
       for (const row of parsed) {
         const cls = classes.find((c) => c.name.toLowerCase() === row.className.toLowerCase()) || classes[0];
@@ -274,6 +384,36 @@ export function AcademicModule() {
   const handleAddTeacher = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userAccount) return;
+    if (isQuickSession) {
+      const nextList: TeacherStaff[] = [
+        { id: nextQuickId('tch'), ...teacherForm, authorUid: userAccount.uid },
+        ...teachers,
+      ];
+      setTeachers(nextList);
+      saveQuickData(QUICK_KEYS.TEACHERS, nextList);
+      appendQuickActivityLog({
+        actorUid: userAccount.uid,
+        actorName: userAccount.displayName,
+        actorRole: effectiveRole,
+        action: 'Tambah GTK',
+        module: 'Akademik',
+        details: `Menambahkan ${teacherForm.name} (${teacherForm.staffType}).`,
+      });
+      setShowTeacherModal(false);
+      setTeacherForm({
+        nip: '',
+        name: '',
+        staffType: 'guru',
+        position: '',
+        subjectName: '',
+        employmentStatus: 'GTY',
+        email: '',
+        phone: '',
+      });
+      setFeedback('Data GTK berhasil disimpan.');
+      return;
+    }
+
     try {
       await addDoc(collection(db, 'teachers'), {
         ...teacherForm,
@@ -308,6 +448,26 @@ export function AcademicModule() {
   const handleAddClass = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userAccount || !classForm.name.trim()) return;
+    if (isQuickSession) {
+      const nextList: SchoolClass[] = [
+        ...classes,
+        {
+          id: nextQuickId('cls'),
+          name: classForm.name.trim(),
+          gradeLevel: classForm.gradeLevel,
+          academicYearName: activeYearName,
+          homeroomTeacherName: classForm.homeroomTeacherName.trim() || 'Belum Ditunjuk',
+          studentCount: 0,
+          authorUid: userAccount.uid,
+        },
+      ];
+      setClasses(nextList);
+      saveQuickData(QUICK_KEYS.CLASSES, nextList);
+      setClassForm({ name: '', gradeLevel: 'X', homeroomTeacherName: '' });
+      setFeedback('Rombongan belajar baru berhasil ditambahkan.');
+      return;
+    }
+
     try {
       await addDoc(collection(db, 'classes'), {
         name: classForm.name.trim(),
@@ -329,6 +489,24 @@ export function AcademicModule() {
   const handleAddSubject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userAccount || !subjectForm.name.trim()) return;
+    if (isQuickSession) {
+      const nextList: Subject[] = [
+        ...subjects,
+        {
+          id: nextQuickId('sub'),
+          ...subjectForm,
+          kkm: Number(subjectForm.kkm),
+          hoursPerWeek: Number(subjectForm.hoursPerWeek),
+          authorUid: userAccount.uid,
+        },
+      ];
+      setSubjects(nextList);
+      saveQuickData(QUICK_KEYS.SUBJECTS, nextList);
+      setSubjectForm({ code: '', name: '', category: 'Umum', kkm: 75, hoursPerWeek: 2 });
+      setFeedback('Mata pelajaran berhasil ditambahkan.');
+      return;
+    }
+
     try {
       await addDoc(collection(db, 'subjects'), {
         ...subjectForm,
@@ -348,6 +526,23 @@ export function AcademicModule() {
   const handleAddAcademicYear = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userAccount || !yearForm.name.trim()) return;
+    if (isQuickSession) {
+      const nextList: AcademicYear[] = [
+        ...academicYears,
+        {
+          id: nextQuickId('ay'),
+          name: yearForm.name.trim(),
+          semester: yearForm.semester,
+          isActive: false,
+          authorUid: userAccount.uid,
+        },
+      ];
+      setAcademicYears(nextList);
+      saveQuickData(QUICK_KEYS.ACADEMIC_YEARS, nextList);
+      setFeedback('Tahun pelajaran baru ditambahkan.');
+      return;
+    }
+
     try {
       await addDoc(collection(db, 'academic_years'), {
         name: yearForm.name.trim(),
@@ -364,6 +559,14 @@ export function AcademicModule() {
   };
 
   const handleActivateYear = async (target: AcademicYear) => {
+    if (isQuickSession) {
+      const nextList = academicYears.map((y) => ({ ...y, isActive: y.id === target.id }));
+      setAcademicYears(nextList);
+      saveQuickData(QUICK_KEYS.ACADEMIC_YEARS, nextList);
+      setFeedback(`Tahun Pelajaran ${target.name} (${target.semester}) diaktifkan.`);
+      return;
+    }
+
     try {
       for (const y of academicYears) {
         if (y.id === target.id || y.isActive) {
@@ -389,6 +592,40 @@ export function AcademicModule() {
     const uas = Number(gradeForm.uasScore);
     const finalScore = Math.round((uh + uts + uas) / 3);
     const predicate = finalScore >= 90 ? 'A' : finalScore >= 80 ? 'B' : finalScore >= 70 ? 'C' : 'D';
+
+    if (isQuickSession) {
+      const newGrade: GradeRecord = {
+        id: nextQuickId('grd'),
+        studentId: stu.id,
+        studentName: stu.name,
+        classId: stu.classId,
+        className: stu.className,
+        subjectName: gradeForm.subjectName || subjects[0]?.name || 'Matematika',
+        semester: gradeForm.semester,
+        academicYearName: activeYearName,
+        uhScore: uh,
+        utsScore: uts,
+        uasScore: uas,
+        finalScore,
+        predicate,
+        parentEmail: stu.parentEmail || '',
+        authorUid: userAccount.uid,
+      };
+      const nextList = [newGrade, ...grades];
+      setGrades(nextList);
+      saveQuickData(QUICK_KEYS.GRADES, nextList);
+      appendQuickActivityLog({
+        actorUid: userAccount.uid,
+        actorName: userAccount.displayName,
+        actorRole: effectiveRole,
+        action: 'Input Nilai Akademik',
+        module: 'Akademik',
+        details: `Menyimpan nilai ${newGrade.subjectName} untuk ${stu.name}: ${finalScore} (${predicate}).`,
+      });
+      setShowGradeModal(false);
+      setFeedback(`Nilai ${stu.name} berhasil disimpan (${finalScore} / ${predicate}).`);
+      return;
+    }
 
     try {
       await addDoc(collection(db, 'grades'), {

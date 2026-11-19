@@ -4,6 +4,20 @@ import { BellRing, CheckCheck, FileSpreadsheet, FileText, Save } from 'lucide-re
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 import { logActivity } from '../lib/audit';
+import {
+  DEFAULT_ATTENDANCE,
+  DEFAULT_ATTENDANCE_NOTIFICATIONS,
+  DEFAULT_CLASSES,
+  DEFAULT_STUDENTS,
+  DEFAULT_SUBJECTS,
+} from '../lib/seedData';
+import {
+  appendQuickActivityLog,
+  loadQuickData,
+  nextQuickId,
+  QUICK_KEYS,
+  saveQuickData,
+} from '../lib/quickLocalStore';
 import { exportAttendanceToExcel, exportAttendanceToPDF } from '../lib/exportUtils';
 import type {
   AttendanceNotification,
@@ -17,7 +31,7 @@ import type {
 type AttendanceTab = 'input' | 'recap' | 'notifications';
 
 export function AttendanceModule() {
-  const { userAccount, effectiveRole } = useAuth();
+  const { userAccount, effectiveRole, isQuickSession } = useAuth();
   const [tab, setTab] = useState<AttendanceTab>('input');
   const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -41,6 +55,28 @@ export function AttendanceModule() {
   );
 
   useEffect(() => {
+    if (isQuickSession) {
+      const clsList = loadQuickData(QUICK_KEYS.CLASSES, DEFAULT_CLASSES);
+      setClasses(clsList);
+      if (clsList.length > 0 && !selectedClassId) setSelectedClassId(clsList[0].id);
+      setSubjects(loadQuickData(QUICK_KEYS.SUBJECTS, DEFAULT_SUBJECTS));
+      setStudents(
+        loadQuickData(QUICK_KEYS.STUDENTS, DEFAULT_STUDENTS).filter((st) => st.status === 'aktif')
+      );
+      setRecords(
+        loadQuickData(QUICK_KEYS.ATTENDANCE, DEFAULT_ATTENDANCE).sort((a, b) =>
+          b.date.localeCompare(a.date)
+        )
+      );
+      setNotifications(
+        loadQuickData(
+          QUICK_KEYS.ATTENDANCE_NOTIFICATIONS,
+          DEFAULT_ATTENDANCE_NOTIFICATIONS
+        ).sort((a, b) => b.date.localeCompare(a.date))
+      );
+      return;
+    }
+
     const unsubs = [
       onSnapshot(collection(db, 'classes'), (s) => {
         const list = s.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<SchoolClass, 'id'>) }));
@@ -73,7 +109,7 @@ export function AttendanceModule() {
       , (e) => handleFirestoreError(e, OperationType.LIST, 'attendance_notifications')),
     ];
     return () => unsubs.forEach((u) => u());
-  }, [selectedClassId]);
+  }, [selectedClassId, isQuickSession]);
 
   const classStudents = students.filter((s) => s.classId === selectedClassId);
 
@@ -105,6 +141,68 @@ export function AttendanceModule() {
     setFeedback(null);
     let savedCount = 0;
     let notifCount = 0;
+
+    if (isQuickSession) {
+      const newRecords: AttendanceRecord[] = [];
+      const newNotifs: AttendanceNotification[] = [];
+      for (const s of classStudents) {
+        const entry = draftStatuses[s.id] || { status: 'Hadir' as AttendanceStatus, note: '' };
+        newRecords.push({
+          id: nextQuickId('att'),
+          date: selectedDate,
+          studentId: s.id,
+          studentName: s.name,
+          classId: s.classId,
+          className: s.className,
+          subjectName: selectedSubject,
+          status: entry.status,
+          note: entry.note,
+          parentEmail: s.parentEmail || '',
+          recordedByName: userAccount.displayName,
+          authorUid: userAccount.uid,
+        });
+        savedCount += 1;
+
+        if (s.parentEmail && (notifyAll || entry.status !== 'Hadir')) {
+          newNotifs.push({
+            id: nextQuickId('notif'),
+            studentId: s.id,
+            studentName: s.name,
+            className: s.className,
+            parentEmail: s.parentEmail,
+            date: selectedDate,
+            status: entry.status,
+            message: `Ananda ${s.name} (${s.className}) tercatat berstatus ${entry.status.toUpperCase()} pada ${selectedDate} (${selectedSubject}).${
+              entry.note ? ` Keterangan: ${entry.note}` : ''
+            }`,
+            isRead: false,
+            authorUid: userAccount.uid,
+          });
+          notifCount += 1;
+        }
+      }
+
+      const nextRecords = [...newRecords, ...records];
+      const nextNotifs = [...newNotifs, ...notifications];
+      setRecords(nextRecords);
+      setNotifications(nextNotifs);
+      saveQuickData(QUICK_KEYS.ATTENDANCE, nextRecords);
+      saveQuickData(QUICK_KEYS.ATTENDANCE_NOTIFICATIONS, nextNotifs);
+
+      appendQuickActivityLog({
+        actorUid: userAccount.uid,
+        actorName: userAccount.displayName,
+        actorRole: effectiveRole,
+        action: 'Catat Absensi Kelas',
+        module: 'Absensi Online',
+        details: `Menyimpan ${savedCount} presensi kelas (${selectedDate}) dan mengirim ${notifCount} notifikasi orang tua.`,
+      });
+      setFeedback(
+        `Berhasil menyimpan ${savedCount} presensi siswa dan mengirim ${notifCount} notifikasi ke akun orang tua.`
+      );
+      setSaving(false);
+      return;
+    }
 
     try {
       for (const s of classStudents) {

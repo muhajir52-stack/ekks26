@@ -19,12 +19,23 @@ import {
 } from './supervisionMasterData';
 import type {
   AcademicEvent,
+  AcademicYear,
   Achievement,
   Announcement,
+  ArchiveFolder,
+  AttendanceNotification,
+  AttendanceRecord,
+  DigitalArchive,
   GalleryItem,
+  GradeRecord,
   NewsArticle,
   PublicDirectoryEntry,
+  SchoolClass,
   SchoolContent,
+  Student,
+  Subject,
+  SupervisionSchedule,
+  TeacherStaff,
 } from '../types/sims';
 import { logActivity } from './audit';
 
@@ -250,6 +261,220 @@ export const DEFAULT_PUBLIC_DIRECTORY: Array<Omit<PublicDirectoryEntry, 'id' | '
   { name: 'Nurul Hidayah, S.E.', roleType: 'tendik', position: 'Kepala Tata Usaha', subject: 'Administrasi & Keuangan Sekolah', education: 'S1 Ekonomi' },
 ];
 
+export const DEFAULT_ACADEMIC_YEARS: AcademicYear[] = [
+  { id: 'ay_2026_ganjil', name: '2026/2027', semester: 'Ganjil', isActive: true, authorUid: 'system' },
+  { id: 'ay_2025_genap', name: '2025/2026', semester: 'Genap', isActive: false, authorUid: 'system' },
+];
+
+export const DEFAULT_CLASSES: SchoolClass[] = [
+  { id: 'cls_x_a', name: 'X-A', gradeLevel: 'X', academicYearName: '2026/2027', homeroomTeacherName: 'Ust. Ahmad Muzakki, M.Ag.', studentCount: 32, authorUid: 'system' },
+  { id: 'cls_xi_ipa_1', name: 'XI IPA 1', gradeLevel: 'XI', academicYearName: '2026/2027', homeroomTeacherName: 'Siti Aminah, S.Pd.', studentCount: 30, authorUid: 'system' },
+  { id: 'cls_xi_ips_1', name: 'XI IPS 1', gradeLevel: 'XI', academicYearName: '2026/2027', homeroomTeacherName: 'M. Sholihin, S.T.', studentCount: 28, authorUid: 'system' },
+  { id: 'cls_xii_ipa_1', name: 'XII IPA 1', gradeLevel: 'XII', academicYearName: '2026/2027', homeroomTeacherName: 'Muhajir, S.Pd., M.Pd.', studentCount: 31, authorUid: 'system' },
+];
+
+export const DEFAULT_SUBJECTS: Subject[] = [
+  { id: 'sub_pai', code: 'PAI', name: 'Pendidikan Agama Islam & Budi Pekerti', category: 'Umum & Keislaman', kkm: 78, hoursPerWeek: 3, authorUid: 'system' },
+  { id: 'sub_mtk', code: 'MTK', name: 'Matematika', category: 'Umum', kkm: 75, hoursPerWeek: 4, authorUid: 'system' },
+  { id: 'sub_bind', code: 'BIND', name: 'Bahasa Indonesia', category: 'Umum', kkm: 76, hoursPerWeek: 4, authorUid: 'system' },
+  { id: 'sub_bing', code: 'BING', name: 'Bahasa Inggris', category: 'Umum', kkm: 75, hoursPerWeek: 3, authorUid: 'system' },
+  { id: 'sub_inf', code: 'INF', name: 'Informatika', category: 'Peminatan & Digital', kkm: 78, hoursPerWeek: 3, authorUid: 'system' },
+  { id: 'sub_asw', code: 'ASW', name: 'Ke-NU-an / Aswaja', category: 'Muatan Khas Pesantren', kkm: 80, hoursPerWeek: 2, authorUid: 'system' },
+];
+
+export const DEFAULT_TEACHERS: TeacherStaff[] = [
+  { id: 'tch_1', nip: '197504122005011002', name: 'Drs. H. Abdul Aziz, M.Pd.', staffType: 'guru', position: 'Kepala Sekolah', subjectName: 'Pendidikan Kewarganegaraan', employmentStatus: 'GTY', email: 'kepsek@smadukepohbaru.sch.id', phone: '081234500001', authorUid: 'system' },
+  { id: 'tch_2', nip: '198407152010011008', name: 'Muhajir, S.Pd., M.Pd.', staffType: 'guru', position: 'Waka Kurikulum', subjectName: 'Matematika', employmentStatus: 'GTY', email: 'muhajir52@guru.sma.belajar.id', phone: '081234500002', authorUid: 'system' },
+  { id: 'tch_3', nip: '198903222014022003', name: 'Siti Aminah, S.Pd.', staffType: 'guru', position: 'Waka Kesiswaan & Wali Kelas', subjectName: 'Bahasa Indonesia', employmentStatus: 'GTY', email: 'aminah@smadukepohbaru.sch.id', phone: '081234500003', authorUid: 'system' },
+  { id: 'tch_4', nip: '199108112018011004', name: 'M. Sholihin, S.T.', staffType: 'guru', position: 'Waka Sarpras', subjectName: 'Informatika', employmentStatus: 'GTY', email: 'sholihin@smadukepohbaru.sch.id', phone: '081234500004', authorUid: 'system' },
+  { id: 'tch_5', nip: '198711022015032001', name: 'Nurul Hidayah, S.E.', staffType: 'tendik', position: 'Kepala Tata Usaha', subjectName: 'Administrasi Sekolah', employmentStatus: 'PTY', email: 'tu@smadukepohbaru.sch.id', phone: '081234500005', authorUid: 'system' },
+];
+
+export const DEFAULT_STUDENTS: Student[] = [
+  { id: 'std_1', nis: '2026001', nisn: '0098123401', name: 'Ahmad Fauzan Hakim', gender: 'L', classId: 'cls_xi_ipa_1', className: 'XI IPA 1', academicYearName: '2026/2027', status: 'aktif', parentName: 'H. Abdullah Hakim', parentEmail: 'hakim.wali@gmail.com', previousSchool: 'MTs Darul Ulum Kepohbaru', authorUid: 'system' },
+  { id: 'std_2', nis: '2026002', nisn: '0098123402', name: 'Nadia Putri Lestari', gender: 'P', classId: 'cls_xi_ipa_1', className: 'XI IPA 1', academicYearName: '2026/2027', status: 'aktif', parentName: 'Hj. Khadijah', parentEmail: 'khadijah.wali@gmail.com', previousSchool: 'SMPN 1 Kepohbaru', authorUid: 'system' },
+  { id: 'std_3', nis: '2026003', nisn: '0108123403', name: 'Muhammad Rizqi Pratama', gender: 'L', classId: 'cls_x_a', className: 'X-A', academicYearName: '2026/2027', status: 'aktif', parentName: 'Bapak Sutrisno', parentEmail: 'sutrisno.wali@gmail.com', previousSchool: 'SMPN 2 Kepohbaru', authorUid: 'system' },
+  { id: 'std_4', nis: '2026004', nisn: '0088123404', name: 'Aisyah Nur Hidayati', gender: 'P', classId: 'cls_xii_ipa_1', className: 'XII IPA 1', academicYearName: '2026/2027', status: 'aktif', parentName: 'Ibu Fatimah', parentEmail: 'fatimah.wali@gmail.com', previousSchool: 'MTsN 3 Bojonegoro', authorUid: 'system' },
+  { id: 'std_5', nis: '2026005', nisn: '0098123405', name: 'Dimas Arif Nugroho', gender: 'L', classId: 'cls_xi_ips_1', className: 'XI IPS 1', academicYearName: '2026/2027', status: 'aktif', parentName: 'Bapak Joko Susilo', parentEmail: 'joko.wali@gmail.com', previousSchool: 'SMP Islam Kepohbaru', authorUid: 'system' },
+];
+
+export const DEFAULT_GRADES: GradeRecord[] = [
+  { id: 'grd_1', studentId: 'std_1', studentName: 'Ahmad Fauzan Hakim', classId: 'cls_xi_ipa_1', className: 'XI IPA 1', subjectName: 'Matematika', semester: 'Ganjil', academicYearName: '2026/2027', uhScore: 88, utsScore: 90, uasScore: 92, finalScore: 90, predicate: 'A', parentEmail: 'hakim.wali@gmail.com', authorUid: 'system' },
+  { id: 'grd_2', studentId: 'std_1', studentName: 'Ahmad Fauzan Hakim', classId: 'cls_xi_ipa_1', className: 'XI IPA 1', subjectName: 'Informatika', semester: 'Ganjil', academicYearName: '2026/2027', uhScore: 91, utsScore: 89, uasScore: 94, finalScore: 91, predicate: 'A', parentEmail: 'hakim.wali@gmail.com', authorUid: 'system' },
+  { id: 'grd_3', studentId: 'std_2', studentName: 'Nadia Putri Lestari', classId: 'cls_xi_ipa_1', className: 'XI IPA 1', subjectName: 'Matematika', semester: 'Ganjil', academicYearName: '2026/2027', uhScore: 95, utsScore: 94, uasScore: 96, finalScore: 95, predicate: 'A', parentEmail: 'khadijah.wali@gmail.com', authorUid: 'system' },
+  { id: 'grd_4', studentId: 'std_3', studentName: 'Muhammad Rizqi Pratama', classId: 'cls_x_a', className: 'X-A', subjectName: 'Bahasa Indonesia', semester: 'Ganjil', academicYearName: '2026/2027', uhScore: 82, utsScore: 84, uasScore: 85, finalScore: 84, predicate: 'B', parentEmail: 'sutrisno.wali@gmail.com', authorUid: 'system' },
+];
+
+const SEED_TODAY = new Date().toISOString().slice(0, 10);
+
+export const DEFAULT_ATTENDANCE: AttendanceRecord[] = [
+  {
+    id: 'att_seed_1',
+    date: SEED_TODAY,
+    studentId: 'std_1',
+    studentName: 'Ahmad Fauzan Hakim',
+    classId: 'cls_xi_ipa_1',
+    className: 'XI IPA 1',
+    subjectName: 'Matematika',
+    status: 'Hadir',
+    note: 'Hadir tepat waktu',
+    parentEmail: 'hakim.wali@gmail.com',
+    recordedByName: 'Muhajir, S.Pd., M.Pd.',
+    authorUid: 'system',
+  },
+  {
+    id: 'att_seed_2',
+    date: SEED_TODAY,
+    studentId: 'std_2',
+    studentName: 'Nadia Putri Lestari',
+    classId: 'cls_xi_ipa_1',
+    className: 'XI IPA 1',
+    subjectName: 'Matematika',
+    status: 'Izin',
+    note: 'Mengikuti pembinaan OSN Provinsi',
+    parentEmail: 'khadijah.wali@gmail.com',
+    recordedByName: 'Muhajir, S.Pd., M.Pd.',
+    authorUid: 'system',
+  },
+];
+
+export const DEFAULT_ATTENDANCE_NOTIFICATIONS: AttendanceNotification[] = [
+  {
+    id: 'notif_seed_1',
+    studentId: 'std_2',
+    studentName: 'Nadia Putri Lestari',
+    className: 'XI IPA 1',
+    parentEmail: 'khadijah.wali@gmail.com',
+    date: SEED_TODAY,
+    status: 'Izin',
+    message: `Ananda Nadia Putri Lestari (XI IPA 1) tercatat berstatus IZIN pada ${SEED_TODAY}. Keterangan: Mengikuti pembinaan OSN Provinsi.`,
+    isRead: false,
+    authorUid: 'system',
+  },
+  {
+    id: 'notif_seed_2',
+    studentId: 'std_1',
+    studentName: 'Ahmad Fauzan Hakim',
+    className: 'XI IPA 1',
+    parentEmail: 'hakim.wali@gmail.com',
+    date: SEED_TODAY,
+    status: 'Hadir',
+    message: `Ananda Ahmad Fauzan Hakim (XI IPA 1) tercatat HADIR tepat waktu pada ${SEED_TODAY} (Matematika).`,
+    isRead: false,
+    authorUid: 'system',
+  },
+];
+
+export const DEFAULT_ARCHIVE_FOLDERS: ArchiveFolder[] = [
+  // Manajerial
+  { id: 'fld_man_1', name: 'Perencanaan Program Sekolah', rootCategory: 'Manajerial', parentFolderId: '', description: 'RKJM, RKT, Visi-Misi, dan KSP SMA Darul Ulum Kepohbaru', allowedRoles: ['super_admin', 'kepala_sekolah', 'tendik', 'supervisor', 'guru'], authorUid: 'system' },
+  { id: 'fld_man_2', name: 'Dokumen Kebijakan', rootCategory: 'Manajerial', parentFolderId: '', description: 'SK Tim Penjamin Mutu, POS Anti-Perundungan, SOP P3K, Tata Tertib', allowedRoles: ['super_admin', 'kepala_sekolah', 'tendik', 'supervisor', 'guru', 'wali_kelas'], authorUid: 'system' },
+  { id: 'fld_man_3', name: 'Rencana Kerja', rootCategory: 'Manajerial', parentFolderId: '', description: 'RKAS, Program Kerja Tahunan Waka, Pembina OSIS & Wali Kelas', allowedRoles: ['super_admin', 'kepala_sekolah', 'tendik', 'supervisor'], authorUid: 'system' },
+  { id: 'fld_man_4', name: 'Laporan Kegiatan', rootCategory: 'Manajerial', parentFolderId: '', description: 'LPJ Dana BOS/BOPP, Laporan Sosialisasi, Berita Acara', allowedRoles: ['super_admin', 'kepala_sekolah', 'tendik', 'supervisor'], authorUid: 'system' },
+  { id: 'fld_man_5', name: 'Evaluasi Program', rootCategory: 'Manajerial', parentFolderId: '', description: 'EDS, Rapor Pendidikan, Laporan Refleksi Pembelajaran & Sumber Daya', allowedRoles: ['super_admin', 'kepala_sekolah', 'tendik', 'supervisor'], authorUid: 'system' },
+  // Kewirausahaan
+  { id: 'fld_kew_1', name: 'Program Kewirausahaan', rootCategory: 'Kewirausahaan', parentFolderId: '', description: 'Master Plan Kewirausahaan, MoU Mitra, P5 Kewirausahaan', allowedRoles: ['super_admin', 'kepala_sekolah', 'tendik', 'supervisor', 'guru'], authorUid: 'system' },
+  { id: 'fld_kew_2', name: 'Perencanaan Kegiatan', rootCategory: 'Kewirausahaan', parentFolderId: '', description: 'Pemetaan SWOT, FGD Komite, RKA Inkubator Bisnis Siswa', allowedRoles: ['super_admin', 'kepala_sekolah', 'tendik', 'supervisor'], authorUid: 'system' },
+  { id: 'fld_kew_3', name: 'Laporan Pelaksanaan', rootCategory: 'Kewirausahaan', parentFolderId: '', description: 'Laporan Proyek Kewirausahaan & Tracer Study Lulusan', allowedRoles: ['super_admin', 'kepala_sekolah', 'tendik', 'supervisor'], authorUid: 'system' },
+  { id: 'fld_kew_4', name: 'Dokumentasi', rootCategory: 'Kewirausahaan', parentFolderId: '', description: 'Brosur Sekolah, Dokumentasi Kegiatan & Kemitraan Masyarakat', allowedRoles: ['super_admin', 'kepala_sekolah', 'tendik', 'supervisor', 'guru'], authorUid: 'system' },
+  { id: 'fld_kew_5', name: 'Evaluasi dan Tindak Lanjut', rootCategory: 'Kewirausahaan', parentFolderId: '', description: 'Refleksi Program Pengembangan Sekolah & RTL Kemitraan', allowedRoles: ['super_admin', 'kepala_sekolah', 'tendik', 'supervisor'], authorUid: 'system' },
+  // Supervisi Tendik
+  { id: 'fld_sup_1', name: 'Instrumen Supervisi', rootCategory: 'Supervisi Tendik', parentFolderId: '', description: 'Instrumen Observasi Pembelajaran Guru & Layanan Teknis Tendik', allowedRoles: ['super_admin', 'kepala_sekolah', 'supervisor', 'tendik'], authorUid: 'system' },
+  { id: 'fld_sup_2', name: 'Jadwal Supervisi', rootCategory: 'Supervisi Tendik', parentFolderId: '', description: 'Rencana Supervisi Tahunan & Jadwal Observasi GTK', allowedRoles: ['super_admin', 'kepala_sekolah', 'supervisor', 'guru', 'tendik'], authorUid: 'system' },
+  { id: 'fld_sup_3', name: 'Hasil Penilaian', rootCategory: 'Supervisi Tendik', parentFolderId: '', description: 'Rekapitulasi Nilai & Lembar Penilaian Kinerja GTK', allowedRoles: ['super_admin', 'kepala_sekolah', 'supervisor'], authorUid: 'system' },
+  { id: 'fld_sup_4', name: 'Berita Acara', rootCategory: 'Supervisi Tendik', parentFolderId: '', description: 'Berita Acara Pelaksanaan, Daftar Hadir & Notula Sosialisasi Supervisi', allowedRoles: ['super_admin', 'kepala_sekolah', 'supervisor', 'tendik'], authorUid: 'system' },
+  { id: 'fld_sup_5', name: 'Rekomendasi', rootCategory: 'Supervisi Tendik', parentFolderId: '', description: 'Catatan Umpan Balik Dialogis & Rekomendasi Supervisor', allowedRoles: ['super_admin', 'kepala_sekolah', 'supervisor'], authorUid: 'system' },
+  { id: 'fld_sup_6', name: 'Tindak Lanjut Supervisi', rootCategory: 'Supervisi Tendik', parentFolderId: '', description: 'Rencana Pengembangan Diri GTK & Laporan Pelatihan Lanjutan', allowedRoles: ['super_admin', 'kepala_sekolah', 'supervisor', 'guru', 'tendik'], authorUid: 'system' },
+];
+
+export const DEFAULT_DIGITAL_ARCHIVES: DigitalArchive[] = [
+  {
+    id: 'arc_seed_1',
+    title: 'Dokumen Visi, Misi & SK Tim Penjaminan Mutu SMA Darul Ulum 2026',
+    folderId: 'fld_man_1',
+    rootCategory: 'Manajerial',
+    fileName: 'SK_Visi_Misi_TPM_2026.pdf',
+    fileType: 'PDF',
+    fileSize: 248000,
+    year: '2026',
+    documentDate: '2026-07-15',
+    description: 'Dokumen penetapan visi-misi sekolah berbasis Rapor Pendidikan dan SK Tim Penjaminan Mutu.',
+    currentVersion: 1,
+    versions: [{ version: 1, updatedAt: '2026-07-15', updatedBy: 'Administrator', note: 'Unggahan awal dokumen resmi.' }],
+    linkedIndicatorCode: '1.1',
+    uploadedByName: 'Administrator',
+    authorUid: 'system',
+  },
+  {
+    id: 'arc_seed_2',
+    title: 'Rencana Kegiatan & Anggaran Sekolah (RKAS) Berbasis Rapor Pendidikan',
+    folderId: 'fld_man_3',
+    rootCategory: 'Manajerial',
+    fileName: 'RKAS_2026_SMA_DU_Kepohbaru.xlsx',
+    fileType: 'XLSX',
+    fileSize: 185000,
+    year: '2026',
+    documentDate: '2026-08-01',
+    description: 'Rincian rencana kerja anggaran tahunan berorientasi peningkatan mutu pembelajaran.',
+    currentVersion: 2,
+    versions: [
+      { version: 1, updatedAt: '2026-07-20', updatedBy: 'Administrator', note: 'Draf awal RKAS.' },
+      { version: 2, updatedAt: '2026-08-01', updatedBy: 'Administrator', note: 'Finalisasi bersama komite sekolah.' },
+    ],
+    linkedIndicatorCode: '1.4',
+    uploadedByName: 'Administrator',
+    authorUid: 'system',
+  },
+  {
+    id: 'arc_seed_3',
+    title: 'Program & Jadwal Supervisi Akademik GTK Tahun 2026/2027',
+    folderId: 'fld_sup_2',
+    rootCategory: 'Supervisi Tendik',
+    fileName: 'Program_Supervisi_GTK_2026.pdf',
+    fileType: 'PDF',
+    fileSize: 312000,
+    year: '2026',
+    documentDate: '2026-09-02',
+    description: 'Jadwal observasi pembelajaran guru dan supervisi layanan teknis tenaga kependidikan.',
+    currentVersion: 1,
+    versions: [{ version: 1, updatedAt: '2026-09-02', updatedBy: 'Administrator', note: 'Dokumen disahkan Kepala Sekolah.' }],
+    linkedIndicatorCode: '3.1',
+    uploadedByName: 'Administrator',
+    authorUid: 'system',
+  },
+];
+
+export const DEFAULT_SUPERVISION_SCHEDULES: SupervisionSchedule[] = [
+  {
+    id: 'sch_seed_1',
+    instrumentId: 'inst_pkks_2026',
+    instrumentTitle: MASTER_PKKS_INSTRUMENT.title,
+    academicYearName: '2026/2027',
+    period: 'Semester Ganjil 2026',
+    targetName: 'Drs. H. Abdul Aziz, M.Pd.',
+    targetRole: 'Kepala Sekolah',
+    targetEmail: 'kepsek@smadukepohbaru.sch.id',
+    supervisorName: 'Pengawas Pembina & Tim Penjaminan Mutu',
+    scheduledDate: '2026-11-24',
+    status: 'Berlangsung',
+    authorUid: 'system',
+  },
+  {
+    id: 'sch_seed_2',
+    instrumentId: 'inst_guru_2026',
+    instrumentTitle: GURU_SUPERVISION_INSTRUMENT.title,
+    academicYearName: '2026/2027',
+    period: 'Semester Ganjil 2026',
+    targetName: 'Siti Aminah, S.Pd.',
+    targetRole: 'Guru Bahasa Indonesia',
+    targetEmail: 'aminah@smadukepohbaru.sch.id',
+    supervisorName: 'Drs. H. Abdul Aziz, M.Pd.',
+    scheduledDate: '2026-11-26',
+    status: 'Terjadwal',
+    authorUid: 'system',
+  },
+];
+
 export async function seedInitialDatabase(actorName: string): Promise<{ seeded: boolean; message: string }> {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error('Pengguna belum terautentikasi.');
@@ -294,126 +519,51 @@ export async function seedInitialDatabase(actorName: string): Promise<{ seeded: 
 
   // 3. Seed Academic Years, Classes, Subjects, Teachers, Students, Grades, Attendance
   const batch2 = writeBatch(db);
-  batch2.set(doc(db, 'academic_years', 'ay_2026_ganjil'), {
-    name: '2026/2027',
-    semester: 'Ganjil',
-    isActive: true,
-    authorUid: uid,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
-  batch2.set(doc(db, 'academic_years', 'ay_2025_genap'), {
-    name: '2025/2026',
-    semester: 'Genap',
-    isActive: false,
-    authorUid: uid,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
-
-  const classesSeed = [
-    { id: 'cls_x_a', name: 'X-A', gradeLevel: 'X', homeroomTeacherName: 'Ust. Ahmad Muzakki, M.Ag.', studentCount: 32 },
-    { id: 'cls_xi_ipa_1', name: 'XI IPA 1', gradeLevel: 'XI', homeroomTeacherName: 'Siti Aminah, S.Pd.', studentCount: 30 },
-    { id: 'cls_xi_ips_1', name: 'XI IPS 1', gradeLevel: 'XI', homeroomTeacherName: 'M. Sholihin, S.T.', studentCount: 28 },
-    { id: 'cls_xii_ipa_1', name: 'XII IPA 1', gradeLevel: 'XII', homeroomTeacherName: 'Muhajir, S.Pd., M.Pd.', studentCount: 31 },
-  ];
-  classesSeed.forEach((c) => {
-    batch2.set(doc(db, 'classes', c.id), {
-      name: c.name,
-      gradeLevel: c.gradeLevel,
-      academicYearName: '2026/2027',
-      homeroomTeacherName: c.homeroomTeacherName,
-      studentCount: c.studentCount,
+  DEFAULT_ACADEMIC_YEARS.forEach(({ id, ...rest }) => {
+    batch2.set(doc(db, 'academic_years', id), {
+      ...rest,
       authorUid: uid,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
   });
 
-  const subjectsSeed = [
-    { id: 'sub_pai', code: 'PAI', name: 'Pendidikan Agama Islam & Budi Pekerti', category: 'Umum & Keislaman', kkm: 78, hoursPerWeek: 3 },
-    { id: 'sub_mtk', code: 'MTK', name: 'Matematika', category: 'Umum', kkm: 75, hoursPerWeek: 4 },
-    { id: 'sub_bind', code: 'BIND', name: 'Bahasa Indonesia', category: 'Umum', kkm: 76, hoursPerWeek: 4 },
-    { id: 'sub_bing', code: 'BING', name: 'Bahasa Inggris', category: 'Umum', kkm: 75, hoursPerWeek: 3 },
-    { id: 'sub_inf', code: 'INF', name: 'Informatika', category: 'Peminatan & Digital', kkm: 78, hoursPerWeek: 3 },
-    { id: 'sub_asw', code: 'ASW', name: 'Ke-NU-an / Aswaja', category: 'Muatan Khas Pesantren', kkm: 80, hoursPerWeek: 2 },
-  ];
-  subjectsSeed.forEach(({ id, ...rest }) => {
+  DEFAULT_CLASSES.forEach(({ id, ...rest }) => {
+    batch2.set(doc(db, 'classes', id), {
+      ...rest,
+      authorUid: uid,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  });
+
+  DEFAULT_SUBJECTS.forEach(({ id, ...rest }) => {
     batch2.set(doc(db, 'subjects', id), { ...rest, authorUid: uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
   });
 
-  const teachersSeed = [
-    { id: 'tch_1', nip: '197504122005011002', name: 'Drs. H. Abdul Aziz, M.Pd.', staffType: 'guru', position: 'Kepala Sekolah', subjectName: 'Pendidikan Kewarganegaraan', employmentStatus: 'GTY', email: 'kepsek@smadukepohbaru.sch.id', phone: '081234500001' },
-    { id: 'tch_2', nip: '198407152010011008', name: 'Muhajir, S.Pd., M.Pd.', staffType: 'guru', position: 'Waka Kurikulum', subjectName: 'Matematika', employmentStatus: 'GTY', email: 'muhajir52@guru.sma.belajar.id', phone: '081234500002' },
-    { id: 'tch_3', nip: '198903222014022003', name: 'Siti Aminah, S.Pd.', staffType: 'guru', position: 'Waka Kesiswaan & Wali Kelas', subjectName: 'Bahasa Indonesia', employmentStatus: 'GTY', email: 'aminah@smadukepohbaru.sch.id', phone: '081234500003' },
-    { id: 'tch_4', nip: '199108112018011004', name: 'M. Sholihin, S.T.', staffType: 'guru', position: 'Waka Sarpras', subjectName: 'Informatika', employmentStatus: 'GTY', email: 'sholihin@smadukepohbaru.sch.id', phone: '081234500004' },
-    { id: 'tch_5', nip: '198711022015032001', name: 'Nurul Hidayah, S.E.', staffType: 'tendik', position: 'Kepala Tata Usaha', subjectName: 'Administrasi Sekolah', employmentStatus: 'PTY', email: 'tu@smadukepohbaru.sch.id', phone: '081234500005' },
-  ];
-  teachersSeed.forEach(({ id, ...rest }) => {
+  DEFAULT_TEACHERS.forEach(({ id, ...rest }) => {
     batch2.set(doc(db, 'teachers', id), { ...rest, authorUid: uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
   });
 
-  const studentsSeed = [
-    { id: 'std_1', nis: '2026001', nisn: '0098123401', name: 'Ahmad Fauzan Hakim', gender: 'L', classId: 'cls_xi_ipa_1', className: 'XI IPA 1', academicYearName: '2026/2027', status: 'aktif', parentName: 'H. Abdullah Hakim', parentEmail: 'hakim.wali@gmail.com', previousSchool: 'MTs Darul Ulum Kepohbaru' },
-    { id: 'std_2', nis: '2026002', nisn: '0098123402', name: 'Nadia Putri Lestari', gender: 'P', classId: 'cls_xi_ipa_1', className: 'XI IPA 1', academicYearName: '2026/2027', status: 'aktif', parentName: 'Hj. Khadijah', parentEmail: 'khadijah.wali@gmail.com', previousSchool: 'SMPN 1 Kepohbaru' },
-    { id: 'std_3', nis: '2026003', nisn: '0108123403', name: 'Muhammad Rizqi Pratama', gender: 'L', classId: 'cls_x_a', className: 'X-A', academicYearName: '2026/2027', status: 'aktif', parentName: 'Bapak Sutrisno', parentEmail: 'sutrisno.wali@gmail.com', previousSchool: 'SMPN 2 Kepohbaru' },
-    { id: 'std_4', nis: '2026004', nisn: '0088123404', name: 'Aisyah Nur Hidayati', gender: 'P', classId: 'cls_xii_ipa_1', className: 'XII IPA 1', academicYearName: '2026/2027', status: 'aktif', parentName: 'Ibu Fatimah', parentEmail: 'fatimah.wali@gmail.com', previousSchool: 'MTsN 3 Bojonegoro' },
-    { id: 'std_5', nis: '2026005', nisn: '0098123405', name: 'Dimas Arif Nugroho', gender: 'L', classId: 'cls_xi_ips_1', className: 'XI IPS 1', academicYearName: '2026/2027', status: 'aktif', parentName: 'Bapak Joko Susilo', parentEmail: 'joko.wali@gmail.com', previousSchool: 'SMP Islam Kepohbaru' },
-  ];
-  studentsSeed.forEach(({ id, ...rest }) => {
+  DEFAULT_STUDENTS.forEach(({ id, ...rest }) => {
     batch2.set(doc(db, 'students', id), { ...rest, authorUid: uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
   });
 
-  const gradesSeed = [
-    { id: 'grd_1', studentId: 'std_1', studentName: 'Ahmad Fauzan Hakim', classId: 'cls_xi_ipa_1', className: 'XI IPA 1', subjectName: 'Matematika', semester: 'Ganjil', academicYearName: '2026/2027', uhScore: 88, utsScore: 90, uasScore: 92, finalScore: 90, predicate: 'A', parentEmail: 'hakim.wali@gmail.com' },
-    { id: 'grd_2', studentId: 'std_1', studentName: 'Ahmad Fauzan Hakim', classId: 'cls_xi_ipa_1', className: 'XI IPA 1', subjectName: 'Informatika', semester: 'Ganjil', academicYearName: '2026/2027', uhScore: 91, utsScore: 89, uasScore: 94, finalScore: 91, predicate: 'A', parentEmail: 'hakim.wali@gmail.com' },
-    { id: 'grd_3', studentId: 'std_2', studentName: 'Nadia Putri Lestari', classId: 'cls_xi_ipa_1', className: 'XI IPA 1', subjectName: 'Matematika', semester: 'Ganjil', academicYearName: '2026/2027', uhScore: 95, utsScore: 94, uasScore: 96, finalScore: 95, predicate: 'A', parentEmail: 'khadijah.wali@gmail.com' },
-    { id: 'grd_4', studentId: 'std_3', studentName: 'Muhammad Rizqi Pratama', classId: 'cls_x_a', className: 'X-A', subjectName: 'Bahasa Indonesia', semester: 'Ganjil', academicYearName: '2026/2027', uhScore: 82, utsScore: 84, uasScore: 85, finalScore: 84, predicate: 'B', parentEmail: 'sutrisno.wali@gmail.com' },
-  ];
-  gradesSeed.forEach(({ id, ...rest }) => {
+  DEFAULT_GRADES.forEach(({ id, ...rest }) => {
     batch2.set(doc(db, 'grades', id), { ...rest, authorUid: uid, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
   });
 
-  const today = new Date().toISOString().slice(0, 10);
-  batch2.set(doc(db, 'attendance', 'att_seed_1'), {
-    date: today,
-    studentId: 'std_1',
-    studentName: 'Ahmad Fauzan Hakim',
-    classId: 'cls_xi_ipa_1',
-    className: 'XI IPA 1',
-    subjectName: 'Matematika',
-    status: 'Hadir',
-    note: 'Hadir tepat waktu',
-    parentEmail: 'hakim.wali@gmail.com',
-    recordedByName: actorName,
-    authorUid: uid,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+  DEFAULT_ATTENDANCE.forEach(({ id, ...rest }) => {
+    batch2.set(doc(db, 'attendance', id), {
+      ...rest,
+      recordedByName: actorName,
+      authorUid: uid,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
   });
-  batch2.set(doc(db, 'attendance', 'att_seed_2'), {
-    date: today,
-    studentId: 'std_2',
-    studentName: 'Nadia Putri Lestari',
-    classId: 'cls_xi_ipa_1',
-    className: 'XI IPA 1',
-    subjectName: 'Matematika',
-    status: 'Izin',
-    note: 'Mengikuti pembinaan OSN Provinsi',
-    parentEmail: 'khadijah.wali@gmail.com',
-    recordedByName: actorName,
-    authorUid: uid,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
-  batch2.set(doc(db, 'attendance_notifications', 'notif_seed_1'), {
-    studentId: 'std_2',
-    studentName: 'Nadia Putri Lestari',
-    className: 'XI IPA 1',
-    parentEmail: 'khadijah.wali@gmail.com',
-    date: today,
-    status: 'Izin',
-    message: `Ananda Nadia Putri Lestari (XI IPA 1) tercatat berstatus IZIN pada ${today}. Keterangan: Mengikuti pembinaan OSN Provinsi.`,
-    isRead: false,
+  batch2.set(doc(db, 'attendance_notifications', DEFAULT_ATTENDANCE_NOTIFICATIONS[0].id), {
+    ...DEFAULT_ATTENDANCE_NOTIFICATIONS[0],
     authorUid: uid,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -422,94 +572,19 @@ export async function seedInitialDatabase(actorName: string): Promise<{ seeded: 
 
   // 4. Seed Digital Archive Folders (3 Root Directories & All Required Subfolders)
   const batch3 = writeBatch(db);
-  const foldersSeed = [
-    // Manajerial
-    { id: 'fld_man_1', name: 'Perencanaan Program Sekolah', rootCategory: 'Manajerial', description: 'RKJM, RKT, Visi-Misi, dan KSP SMA Darul Ulum Kepohbaru', allowedRoles: ['super_admin', 'kepala_sekolah', 'tendik', 'supervisor', 'guru'] },
-    { id: 'fld_man_2', name: 'Dokumen Kebijakan', rootCategory: 'Manajerial', description: 'SK Tim Penjamin Mutu, POS Anti-Perundungan, SOP P3K, Tata Tertib', allowedRoles: ['super_admin', 'kepala_sekolah', 'tendik', 'supervisor', 'guru', 'wali_kelas'] },
-    { id: 'fld_man_3', name: 'Rencana Kerja', rootCategory: 'Manajerial', description: 'RKAS, Program Kerja Tahunan Waka, Pembina OSIS & Wali Kelas', allowedRoles: ['super_admin', 'kepala_sekolah', 'tendik', 'supervisor'] },
-    { id: 'fld_man_4', name: 'Laporan Kegiatan', rootCategory: 'Manajerial', description: 'LPJ Dana BOS/BOPP, Laporan Sosialisasi, Berita Acara', allowedRoles: ['super_admin', 'kepala_sekolah', 'tendik', 'supervisor'] },
-    { id: 'fld_man_5', name: 'Evaluasi Program', rootCategory: 'Manajerial', description: 'EDS, Rapor Pendidikan, Laporan Refleksi Pembelajaran & Sumber Daya', allowedRoles: ['super_admin', 'kepala_sekolah', 'tendik', 'supervisor'] },
-    // Kewirausahaan
-    { id: 'fld_kew_1', name: 'Program Kewirausahaan', rootCategory: 'Kewirausahaan', description: 'Master Plan Kewirausahaan, MoU Mitra, P5 Kewirausahaan', allowedRoles: ['super_admin', 'kepala_sekolah', 'tendik', 'supervisor', 'guru'] },
-    { id: 'fld_kew_2', name: 'Perencanaan Kegiatan', rootCategory: 'Kewirausahaan', description: 'Pemetaan SWOT, FGD Komite, RKA Inkubator Bisnis Siswa', allowedRoles: ['super_admin', 'kepala_sekolah', 'tendik', 'supervisor'] },
-    { id: 'fld_kew_3', name: 'Laporan Pelaksanaan', rootCategory: 'Kewirausahaan', description: 'Laporan Proyek Kewirausahaan & Tracer Study Lulusan', allowedRoles: ['super_admin', 'kepala_sekolah', 'tendik', 'supervisor'] },
-    { id: 'fld_kew_4', name: 'Dokumentasi', rootCategory: 'Kewirausahaan', description: 'Brosur Sekolah, Dokumentasi Kegiatan & Kemitraan Masyarakat', allowedRoles: ['super_admin', 'kepala_sekolah', 'tendik', 'supervisor', 'guru'] },
-    { id: 'fld_kew_5', name: 'Evaluasi dan Tindak Lanjut', rootCategory: 'Kewirausahaan', description: 'Refleksi Program Pengembangan Sekolah & RTL Kemitraan', allowedRoles: ['super_admin', 'kepala_sekolah', 'tendik', 'supervisor'] },
-    // Supervisi Tendik
-    { id: 'fld_sup_1', name: 'Instrumen Supervisi', rootCategory: 'Supervisi Tendik', description: 'Instrumen Observasi Pembelajaran Guru & Layanan Teknis Tendik', allowedRoles: ['super_admin', 'kepala_sekolah', 'supervisor', 'tendik'] },
-    { id: 'fld_sup_2', name: 'Jadwal Supervisi', rootCategory: 'Supervisi Tendik', description: 'Rencana Supervisi Tahunan & Jadwal Observasi GTK', allowedRoles: ['super_admin', 'kepala_sekolah', 'supervisor', 'guru', 'tendik'] },
-    { id: 'fld_sup_3', name: 'Hasil Penilaian', rootCategory: 'Supervisi Tendik', description: 'Rekapitulasi Nilai & Lembar Penilaian Kinerja GTK', allowedRoles: ['super_admin', 'kepala_sekolah', 'supervisor'] },
-    { id: 'fld_sup_4', name: 'Berita Acara', rootCategory: 'Supervisi Tendik', description: 'Berita Acara Pelaksanaan, Daftar Hadir & Notula Sosialisasi Supervisi', allowedRoles: ['super_admin', 'kepala_sekolah', 'supervisor', 'tendik'] },
-    { id: 'fld_sup_5', name: 'Rekomendasi', rootCategory: 'Supervisi Tendik', description: 'Catatan Umpan Balik Dialogis & Rekomendasi Supervisor', allowedRoles: ['super_admin', 'kepala_sekolah', 'supervisor'] },
-    { id: 'fld_sup_6', name: 'Tindak Lanjut Supervisi', rootCategory: 'Supervisi Tendik', description: 'Rencana Pengembangan Diri GTK & Laporan Pelatihan Lanjutan', allowedRoles: ['super_admin', 'kepala_sekolah', 'supervisor', 'guru', 'tendik'] },
-  ];
-
-  foldersSeed.forEach(({ id, ...rest }) => {
+  DEFAULT_ARCHIVE_FOLDERS.forEach(({ id, ...rest }) => {
     batch3.set(doc(db, 'archive_folders', id), {
       ...rest,
-      parentFolderId: '',
       authorUid: uid,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
   });
 
-  const sampleArchives = [
-    {
-      id: 'arc_seed_1',
-      title: 'Dokumen Visi, Misi & SK Tim Penjaminan Mutu SMA Darul Ulum 2026',
-      folderId: 'fld_man_1',
-      rootCategory: 'Manajerial',
-      fileName: 'SK_Visi_Misi_TPM_2026.pdf',
-      fileType: 'PDF',
-      fileSize: 248000,
-      year: '2026',
-      documentDate: '2026-07-15',
-      description: 'Dokumen penetapan visi-misi sekolah berbasis Rapor Pendidikan dan SK Tim Penjaminan Mutu.',
-      currentVersion: 1,
-      versions: [{ version: 1, updatedAt: '2026-07-15', updatedBy: actorName, note: 'Unggahan awal dokumen resmi.' }],
-      linkedIndicatorCode: '1.1',
-      uploadedByName: actorName,
-    },
-    {
-      id: 'arc_seed_2',
-      title: 'Rencana Kegiatan & Anggaran Sekolah (RKAS) Berbasis Rapor Pendidikan',
-      folderId: 'fld_man_3',
-      rootCategory: 'Manajerial',
-      fileName: 'RKAS_2026_SMA_DU_Kepohbaru.xlsx',
-      fileType: 'XLSX',
-      fileSize: 185000,
-      year: '2026',
-      documentDate: '2026-08-01',
-      description: 'Rincian rencana kerja anggaran tahunan berorientasi peningkatan mutu pembelajaran.',
-      currentVersion: 2,
-      versions: [
-        { version: 1, updatedAt: '2026-07-20', updatedBy: actorName, note: 'Draf awal RKAS.' },
-        { version: 2, updatedAt: '2026-08-01', updatedBy: actorName, note: 'Finalisasi bersama komite sekolah.' },
-      ],
-      linkedIndicatorCode: '1.4',
-      uploadedByName: actorName,
-    },
-    {
-      id: 'arc_seed_3',
-      title: 'Program & Jadwal Supervisi Akademik GTK Tahun 2026/2027',
-      folderId: 'fld_sup_2',
-      rootCategory: 'Supervisi Tendik',
-      fileName: 'Program_Supervisi_GTK_2026.pdf',
-      fileType: 'PDF',
-      fileSize: 312000,
-      year: '2026',
-      documentDate: '2026-09-02',
-      description: 'Jadwal observasi pembelajaran guru dan supervisi layanan teknis tenaga kependidikan.',
-      currentVersion: 1,
-      versions: [{ version: 1, updatedAt: '2026-09-02', updatedBy: actorName, note: 'Dokumen disahkan Kepala Sekolah.' }],
-      linkedIndicatorCode: '3.1',
-      uploadedByName: actorName,
-    },
-  ];
-  sampleArchives.forEach(({ id, ...rest }) => {
+  DEFAULT_DIGITAL_ARCHIVES.forEach(({ id, ...rest }) => {
     batch3.set(doc(db, 'digital_archives', id), {
       ...rest,
+      uploadedByName: actorName,
       authorUid: uid,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -566,35 +641,13 @@ export async function seedInitialDatabase(actorName: string): Promise<{ seeded: 
     });
   });
 
-  batch4.set(doc(db, 'supervision_schedules', 'sch_seed_1'), {
-    instrumentId: 'inst_pkks_2026',
-    instrumentTitle: MASTER_PKKS_INSTRUMENT.title,
-    academicYearName: '2026/2027',
-    period: 'Semester Ganjil 2026',
-    targetName: 'Drs. H. Abdul Aziz, M.Pd.',
-    targetRole: 'Kepala Sekolah',
-    targetEmail: 'kepsek@smadukepohbaru.sch.id',
-    supervisorName: 'Pengawas Pembina & Tim Penjaminan Mutu',
-    scheduledDate: '2026-11-24',
-    status: 'Berlangsung',
-    authorUid: uid,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
-  batch4.set(doc(db, 'supervision_schedules', 'sch_seed_2'), {
-    instrumentId: 'inst_guru_2026',
-    instrumentTitle: GURU_SUPERVISION_INSTRUMENT.title,
-    academicYearName: '2026/2027',
-    period: 'Semester Ganjil 2026',
-    targetName: 'Siti Aminah, S.Pd.',
-    targetRole: 'Guru Bahasa Indonesia',
-    targetEmail: 'aminah@smadukepohbaru.sch.id',
-    supervisorName: 'Drs. H. Abdul Aziz, M.Pd.',
-    scheduledDate: '2026-11-26',
-    status: 'Terjadwal',
-    authorUid: uid,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+  DEFAULT_SUPERVISION_SCHEDULES.forEach(({ id, ...rest }) => {
+    batch4.set(doc(db, 'supervision_schedules', id), {
+      ...rest,
+      authorUid: uid,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
   });
   await batch4.commit();
 

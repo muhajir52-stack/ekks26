@@ -26,6 +26,17 @@ import {
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 import { logActivity } from '../lib/audit';
+import { DEFAULT_DIGITAL_ARCHIVES, DEFAULT_SUPERVISION_SCHEDULES } from '../lib/seedData';
+import {
+  appendQuickActivityLog,
+  DEFAULT_QUICK_INDICATORS,
+  DEFAULT_QUICK_INSTRUMENTS,
+  DEFAULT_QUICK_SUPERVISION_ASSESSMENTS,
+  loadQuickData,
+  nextQuickId,
+  QUICK_KEYS,
+  saveQuickData,
+} from '../lib/quickLocalStore';
 import {
   calculatePredicate,
   calculateSheetSummary,
@@ -51,7 +62,7 @@ import type {
 type SupervisionTab = 'assessments' | 'schedules' | 'instruments' | 'recap';
 
 export function SupervisionModule() {
-  const { userAccount, effectiveRole } = useAuth();
+  const { userAccount, effectiveRole, isQuickSession } = useAuth();
   const [tab, setTab] = useState<SupervisionTab>('assessments');
 
   const [instruments, setInstruments] = useState<SupervisionInstrument[]>([]);
@@ -115,6 +126,26 @@ export function SupervisionModule() {
   const canApprove = ['super_admin', 'kepala_sekolah'].includes(effectiveRole);
 
   useEffect(() => {
+    if (isQuickSession) {
+      setInstruments(loadQuickData(QUICK_KEYS.SUPERVISION_INSTRUMENTS, DEFAULT_QUICK_INSTRUMENTS));
+      setIndicators(
+        loadQuickData(QUICK_KEYS.SUPERVISION_INDICATORS, DEFAULT_QUICK_INDICATORS).sort(
+          (a, b) => a.orderIndex - b.orderIndex
+        )
+      );
+      setSchedules(
+        loadQuickData(QUICK_KEYS.SUPERVISION_SCHEDULES, DEFAULT_SUPERVISION_SCHEDULES)
+      );
+      setAssessments(
+        loadQuickData(
+          QUICK_KEYS.SUPERVISION_ASSESSMENTS,
+          DEFAULT_QUICK_SUPERVISION_ASSESSMENTS
+        )
+      );
+      setArchives(loadQuickData(QUICK_KEYS.DIGITAL_ARCHIVES, DEFAULT_DIGITAL_ARCHIVES));
+      return;
+    }
+
     const unsubs = [
       onSnapshot(
         collection(db, 'supervision_instruments'),
@@ -175,7 +206,7 @@ export function SupervisionModule() {
       ),
     ];
     return () => unsubs.forEach((u) => u());
-  }, []);
+  }, [isQuickSession]);
 
   const getIndicatorsForInstrument = (instrumentId: string): SupervisionIndicator[] => {
     const fromDb = indicators.filter((i) => i.instrumentId === instrumentId);
@@ -229,6 +260,45 @@ export function SupervisionModule() {
     }
     const instIndicators = getIndicatorsForInstrument(sch.instrumentId);
     const maxScore = instIndicators.length * 4;
+
+    if (isQuickSession) {
+      const createdObj: SupervisionAssessment = {
+        id: nextQuickId('asm'),
+        scheduleId: sch.id,
+        instrumentId: sch.instrumentId,
+        instrumentTitle: sch.instrumentTitle,
+        schoolName: 'SMA Darul Ulum Kepohbaru',
+        assessedPersonName: sch.targetName,
+        assessedPersonRole: sch.targetRole,
+        assessedPersonEmail: sch.targetEmail || '',
+        supervisorName: sch.supervisorName,
+        academicYearName: sch.academicYearName,
+        period: sch.period,
+        itemScores: {},
+        sheetNotes: {},
+        overallScore: 0,
+        overallMaxScore: maxScore,
+        overallPercentage: 0,
+        overallPredicate: 'Sangat Kurang',
+        unfilledCount: instIndicators.length,
+        recommendations: '',
+        followUpPlan: '',
+        followUpDeadline: '',
+        status: 'Draft',
+        authorUid: userAccount.uid,
+      };
+      const nextAssessments = [createdObj, ...assessments];
+      const nextSchedules = schedules.map((item) =>
+        item.id === sch.id ? { ...item, status: 'Berlangsung' as const } : item
+      );
+      setAssessments(nextAssessments);
+      setSchedules(nextSchedules);
+      saveQuickData(QUICK_KEYS.SUPERVISION_ASSESSMENTS, nextAssessments);
+      saveQuickData(QUICK_KEYS.SUPERVISION_SCHEDULES, nextSchedules);
+      openAssessmentEditor(createdObj);
+      return;
+    }
+
     try {
       const docRef = await addDoc(collection(db, 'supervision_assessments'), {
         scheduleId: sch.id,
@@ -392,6 +462,25 @@ export function SupervisionModule() {
 
   const handleSyncMasterInstrument = async () => {
     if (!userAccount || !canSupervise) return;
+    if (isQuickSession) {
+      setInstruments(DEFAULT_QUICK_INSTRUMENTS);
+      setIndicators(DEFAULT_QUICK_INDICATORS);
+      saveQuickData(QUICK_KEYS.SUPERVISION_INSTRUMENTS, DEFAULT_QUICK_INSTRUMENTS);
+      saveQuickData(QUICK_KEYS.SUPERVISION_INDICATORS, DEFAULT_QUICK_INDICATORS);
+      appendQuickActivityLog({
+        actorUid: userAccount.uid,
+        actorName: userAccount.displayName,
+        actorRole: effectiveRole,
+        action: 'Sinkronkan Instrumen Master PDF',
+        module: 'Supervisi Digital',
+        details: 'Memperbarui 3 instrumen dan 88 butir master 8 aspek ke penyimpanan sesi lokal.',
+      });
+      setFeedback(
+        'Seluruh 8 lembar dan 88 butir instrumen master (sesuai file PDF) siap digunakan pada sesi ini.'
+      );
+      return;
+    }
+
     setSyncingMaster(true);
     setFeedback(null);
     try {
@@ -491,6 +580,41 @@ export function SupervisionModule() {
       instruments[0] || { id: 'inst_pkks_2026', title: MASTER_PKKS_INSTRUMENT.title };
     const instIndicators = getIndicatorsForInstrument(inst.id);
     const maxScore = instIndicators.length * 4;
+
+    if (isQuickSession) {
+      const createdObj: SupervisionAssessment = {
+        id: nextQuickId('asm'),
+        scheduleId: '',
+        instrumentId: inst.id,
+        instrumentTitle: inst.title,
+        schoolName: 'SMA Darul Ulum Kepohbaru',
+        assessedPersonName: newAssessmentForm.assessedPersonName.trim(),
+        assessedPersonRole: newAssessmentForm.assessedPersonRole.trim(),
+        assessedPersonEmail: '',
+        supervisorName: newAssessmentForm.supervisorName.trim() || userAccount.displayName,
+        academicYearName: newAssessmentForm.academicYearName,
+        period: newAssessmentForm.period,
+        itemScores: {},
+        sheetNotes: {},
+        overallScore: 0,
+        overallMaxScore: maxScore,
+        overallPercentage: 0,
+        overallPredicate: 'Sangat Kurang',
+        unfilledCount: instIndicators.length,
+        recommendations: '',
+        followUpPlan: '',
+        followUpDeadline: '',
+        status: 'Draft',
+        authorUid: userAccount.uid,
+      };
+      const nextList = [createdObj, ...assessments];
+      setAssessments(nextList);
+      saveQuickData(QUICK_KEYS.SUPERVISION_ASSESSMENTS, nextList);
+      setShowNewAssessmentModal(false);
+      openAssessmentEditor(createdObj);
+      return;
+    }
+
     try {
       const docRef = await addDoc(collection(db, 'supervision_assessments'), {
         scheduleId: '',
@@ -555,6 +679,54 @@ export function SupervisionModule() {
     }
     setSaving(true);
     setFeedback(null);
+
+    if (isQuickSession) {
+      const updatedAssessment: SupervisionAssessment = {
+        ...activeAssessment,
+        itemScores,
+        sheetNotes,
+        ...overallCalculation,
+        recommendations,
+        followUpPlan,
+        followUpDeadline,
+        status: targetStatus,
+        ...(targetStatus === 'Disetujui' ? { approvedByName: userAccount.displayName } : {}),
+      };
+      const nextAssessments = assessments.map((a) =>
+        a.id === activeAssessment.id ? updatedAssessment : a
+      );
+      setAssessments(nextAssessments);
+      saveQuickData(QUICK_KEYS.SUPERVISION_ASSESSMENTS, nextAssessments);
+      if (activeAssessment.scheduleId) {
+        const nextSchedStatus: SupervisionSchedule['status'] =
+          targetStatus === 'Disetujui'
+            ? 'Disetujui'
+            : targetStatus === 'Selesai'
+            ? 'Selesai'
+            : 'Berlangsung';
+        const nextSchedules = schedules.map((s) =>
+          s.id === activeAssessment.scheduleId ? { ...s, status: nextSchedStatus } : s
+        );
+        setSchedules(nextSchedules);
+        saveQuickData(QUICK_KEYS.SUPERVISION_SCHEDULES, nextSchedules);
+      }
+      setActiveAssessment(updatedAssessment);
+      appendQuickActivityLog({
+        actorUid: userAccount.uid,
+        actorName: userAccount.displayName,
+        actorRole: effectiveRole,
+        action:
+          targetStatus === 'Disetujui'
+            ? 'Validasi Hasil Supervisi'
+            : 'Simpan Penilaian Supervisi',
+        module: 'Supervisi Digital',
+        details: `${activeAssessment.assessedPersonName} — Nilai ${overallCalculation.overallPercentage}% (${overallCalculation.overallPredicate}), Status: ${targetStatus}.`,
+      });
+      setFeedback(`Penilaian supervisi berhasil disimpan dengan status ${targetStatus}.`);
+      setSaving(false);
+      return;
+    }
+
     try {
       const updatePayload: Record<string, unknown> = {
         itemScores,
@@ -622,6 +794,38 @@ export function SupervisionModule() {
     const inst =
       instruments.find((i) => i.id === scheduleForm.instrumentId) || instruments[0];
     if (!inst) return;
+
+    if (isQuickSession) {
+      const created: SupervisionSchedule = {
+        id: nextQuickId('sch'),
+        instrumentId: inst.id,
+        instrumentTitle: inst.title,
+        academicYearName: scheduleForm.academicYearName,
+        period: scheduleForm.period,
+        targetName: scheduleForm.targetName.trim(),
+        targetRole: scheduleForm.targetRole.trim(),
+        supervisorName: scheduleForm.supervisorName.trim() || userAccount.displayName,
+        scheduledDate: scheduleForm.scheduledDate,
+        status: 'Terjadwal',
+        authorUid: userAccount.uid,
+      };
+      const nextList = [created, ...schedules];
+      setSchedules(nextList);
+      saveQuickData(QUICK_KEYS.SUPERVISION_SCHEDULES, nextList);
+      setShowScheduleModal(false);
+      setScheduleForm({
+        instrumentId: instruments[0]?.id || '',
+        academicYearName: '2026/2027',
+        period: 'Semester Ganjil 2026',
+        targetName: '',
+        targetRole: 'Guru',
+        supervisorName: '',
+        scheduledDate: new Date().toISOString().slice(0, 10),
+      });
+      setFeedback('Jadwal supervisi baru berhasil dibuat.');
+      return;
+    }
+
     try {
       await addDoc(collection(db, 'supervision_schedules'), {
         instrumentId: inst.id,
@@ -656,6 +860,21 @@ export function SupervisionModule() {
   const handleCreateInstrument = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userAccount) return;
+    if (isQuickSession) {
+      const created: SupervisionInstrument = {
+        id: nextQuickId('inst'),
+        ...instrumentForm,
+        authorUid: userAccount.uid,
+      };
+      const nextList = [...instruments, created];
+      setInstruments(nextList);
+      saveQuickData(QUICK_KEYS.SUPERVISION_INSTRUMENTS, nextList);
+      setShowNewInstrumentModal(false);
+      setInstrumentForm({ code: '', title: '', targetType: 'guru', year: '2026', description: '' });
+      setFeedback('Instrumen supervisi baru ditambahkan.');
+      return;
+    }
+
     try {
       await addDoc(collection(db, 'supervision_instruments'), {
         ...instrumentForm,

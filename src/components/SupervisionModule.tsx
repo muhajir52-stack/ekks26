@@ -112,7 +112,7 @@ export function SupervisionModule() {
     instrumentId: 'inst_pkks_2026',
     academicYearName: '2026/2027',
     period: 'Semester Ganjil 2026',
-    assessedPersonName: 'Drs. H. Abdul Aziz, M.Pd.',
+    assessedPersonName: 'SALIM, S.Pd., M.Pd',
     assessedPersonRole: 'Kepala Sekolah',
     supervisorName: '',
   });

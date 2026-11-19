@@ -84,7 +84,7 @@ export const DEFAULT_PUBLIC_PROFILE: Record<string, Omit<SchoolContent, 'id' | '
     items: [
       { label: 'Ketua Yayasan', value: 'KH. Ahmad Syafi’i, M.Pd.I', description: 'Pembina & Penyelenggara Pendidikan' },
       { label: 'Komite Sekolah', value: 'H. Sudirman, S.Sos.', description: 'Mitra Strategis Orang Tua & Masyarakat' },
-      { label: 'Kepala Sekolah', value: 'Drs. H. Abdul Aziz, M.Pd.', description: 'Penanggung Jawab Manajerial, Kewirausahaan & Supervisi' },
+      { label: 'Kepala Sekolah', value: 'SALIM, S.Pd., M.Pd', description: 'Penanggung Jawab Manajerial, Kewirausahaan & Supervisi' },
       { label: 'Waka Kurikulum', value: 'Muhajir, S.Pd., M.Pd.', description: 'Koordinator KSP, Pembelajaran & Asesmen' },
       { label: 'Waka Kesiswaan', value: 'Siti Aminah, S.Pd.', description: 'Pembinaan OSIS, Ekstrakurikuler & Prestasi' },
       { label: 'Waka Sarpras & Humas', value: 'M. Sholihin, S.T.', description: 'Pengelolaan Sarpras, Kemitraan & Digitalisasi' },
@@ -253,7 +253,7 @@ export const DEFAULT_GALLERY: Array<Omit<GalleryItem, 'id' | 'authorUid'>> = [
 ];
 
 export const DEFAULT_PUBLIC_DIRECTORY: Array<Omit<PublicDirectoryEntry, 'id' | 'authorUid'>> = [
-  { name: 'Drs. H. Abdul Aziz, M.Pd.', roleType: 'pimpinan', position: 'Kepala Sekolah', subject: 'Manajemen Pendidikan', education: 'S2 Pendidikan' },
+  { name: 'SALIM, S.Pd., M.Pd', roleType: 'pimpinan', position: 'Kepala Sekolah', subject: 'Manajemen Pendidikan', education: 'S2 Pendidikan' },
   { name: 'Muhajir, S.Pd., M.Pd.', roleType: 'guru', position: 'Waka Kurikulum / Guru', subject: 'Matematika', education: 'S2 Pendidikan Matematika' },
   { name: 'Siti Aminah, S.Pd.', roleType: 'guru', position: 'Waka Kesiswaan / Wali Kelas XI IPA 1', subject: 'Bahasa Indonesia', education: 'S1 Pendidikan Bahasa Indonesia' },
   { name: 'M. Sholihin, S.T.', roleType: 'guru', position: 'Waka Sarpras / Guru', subject: 'Informatika & Fisika', education: 'S1 Teknik' },
@@ -283,7 +283,7 @@ export const DEFAULT_SUBJECTS: Subject[] = [
 ];
 
 export const DEFAULT_TEACHERS: TeacherStaff[] = [
-  { id: 'tch_1', nip: '197504122005011002', name: 'Drs. H. Abdul Aziz, M.Pd.', staffType: 'guru', position: 'Kepala Sekolah', subjectName: 'Pendidikan Kewarganegaraan', employmentStatus: 'GTY', email: 'kepsek@smadukepohbaru.sch.id', phone: '081234500001', authorUid: 'system' },
+  { id: 'tch_1', nip: '197504122005011002', name: 'SALIM, S.Pd., M.Pd', staffType: 'guru', position: 'Kepala Sekolah', subjectName: 'Pendidikan Kewarganegaraan', employmentStatus: 'GTY', email: 'kepsek@smadukepohbaru.sch.id', phone: '081234500001', authorUid: 'system' },
   { id: 'tch_2', nip: '198407152010011008', name: 'Muhajir, S.Pd., M.Pd.', staffType: 'guru', position: 'Waka Kurikulum', subjectName: 'Matematika', employmentStatus: 'GTY', email: 'muhajir52@guru.sma.belajar.id', phone: '081234500002', authorUid: 'system' },
   { id: 'tch_3', nip: '198903222014022003', name: 'Siti Aminah, S.Pd.', staffType: 'guru', position: 'Waka Kesiswaan & Wali Kelas', subjectName: 'Bahasa Indonesia', employmentStatus: 'GTY', email: 'aminah@smadukepohbaru.sch.id', phone: '081234500003', authorUid: 'system' },
   { id: 'tch_4', nip: '199108112018011004', name: 'M. Sholihin, S.T.', staffType: 'guru', position: 'Waka Sarpras', subjectName: 'Informatika', employmentStatus: 'GTY', email: 'sholihin@smadukepohbaru.sch.id', phone: '081234500004', authorUid: 'system' },
@@ -451,7 +451,7 @@ export const DEFAULT_SUPERVISION_SCHEDULES: SupervisionSchedule[] = [
     instrumentTitle: MASTER_PKKS_INSTRUMENT.title,
     academicYearName: '2026/2027',
     period: 'Semester Ganjil 2026',
-    targetName: 'Drs. H. Abdul Aziz, M.Pd.',
+    targetName: 'SALIM, S.Pd., M.Pd',
     targetRole: 'Kepala Sekolah',
     targetEmail: 'kepsek@smadukepohbaru.sch.id',
     supervisorName: 'Pengawas Pembina & Tim Penjaminan Mutu',
@@ -468,7 +468,7 @@ export const DEFAULT_SUPERVISION_SCHEDULES: SupervisionSchedule[] = [
     targetName: 'Siti Aminah, S.Pd.',
     targetRole: 'Guru Bahasa Indonesia',
     targetEmail: 'aminah@smadukepohbaru.sch.id',
-    supervisorName: 'Drs. H. Abdul Aziz, M.Pd.',
+    supervisorName: 'SALIM, S.Pd., M.Pd',
     scheduledDate: '2026-11-26',
     status: 'Terjadwal',
     authorUid: 'system',

@@ -520,12 +520,12 @@ export function PublicPortal({ onOpenPortal, onQuickLogin, isAuthenticated }: Pu
                 </div>
                 <div className="flex items-start gap-5">
                   <PrincipalAvatarVisual
-                    name="Drs. H. Abdul Aziz, M.Pd."
+                    name="SALIM, S.Pd., M.Pd"
                     imageUrl={visuals.foto_kepala_sekolah.url}
                   />
                   <div className="space-y-1">
                     <h2 className="text-2xl font-editorial font-semibold text-slate-900">
-                      Drs. H. Abdul Aziz, M.Pd.
+                      SALIM, S.Pd., M.Pd
                     </h2>
                     <div className="text-sm text-emerald-800 font-medium">
                       Kepala SMA Darul Ulum Kepohbaru

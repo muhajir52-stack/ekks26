@@ -119,7 +119,7 @@ export const DEFAULT_QUICK_SUPERVISION_ASSESSMENTS: SupervisionAssessment[] = [
     instrumentId: 'inst_pkks_2026',
     instrumentTitle: MASTER_PKKS_INSTRUMENT.title,
     schoolName: 'SMA Darul Ulum Kepohbaru',
-    assessedPersonName: 'Drs. H. Abdul Aziz, M.Pd.',
+    assessedPersonName: 'SALIM, S.Pd., M.Pd',
     assessedPersonRole: 'Kepala Sekolah',
     assessedPersonEmail: 'kepsek@smadukepohbaru.sch.id',
     supervisorName: 'Pengawas Pembina & Tim Penjaminan Mutu',

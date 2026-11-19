@@ -111,7 +111,6 @@ function SimsShell() {
     authError,
     isQuickSession,
     quickAccounts,
-    activeQuickAccountId,
     loginWithQuickAccount,
     signInWithGoogle,
     logout,
@@ -186,7 +185,7 @@ function SimsShell() {
   if (!userAccount) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 sm:p-6">
-        <div className="max-w-4xl w-full bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 space-y-6 shadow-sm">
+        <div className="max-w-2xl w-full bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 space-y-6 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <button
               type="button"
@@ -205,8 +204,8 @@ function SimsShell() {
               Masuk ke Dasbor SIMS SMA Darul Ulum Kepohbaru
             </h1>
             <p className="text-sm text-slate-600 leading-relaxed">
-              Pilih salah satu akun pada Menu Akun Masuk Langsung untuk langsung mengakses dasbor
-              tanpa kendala domain terpublikasi, atau gunakan Akun Google institusi Anda.
+              Klik akun Super Administrator pada menu di bawah untuk langsung mengakses seluruh fitur
+              dasbor tanpa kendala domain terpublikasi, atau gunakan Akun Google institusi Anda.
             </p>
           </div>
 
@@ -226,29 +225,27 @@ function SimsShell() {
               <span className="text-xs text-slate-500">1 klik langsung buka dasbor</span>
             </div>
 
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="space-y-3">
               {quickAccounts.map((acc) => (
                 <button
                   key={acc.id}
                   type="button"
                   onClick={() => loginWithQuickAccount(acc.id)}
-                  className="text-left border border-slate-200 hover:border-emerald-700 hover:bg-emerald-50/40 rounded-xl p-4 transition-colors flex flex-col justify-between gap-3 group"
+                  className="w-full text-left border border-emerald-200 bg-emerald-50/40 hover:border-emerald-700 hover:bg-emerald-50 rounded-xl p-5 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 group"
                 >
                   <div className="space-y-1">
                     <div className="text-xs font-semibold text-emerald-800">
                       {ROLE_LABELS[acc.role]}
                     </div>
-                    <div className="text-sm font-semibold text-slate-950">
+                    <div className="text-base font-semibold text-slate-950">
                       {acc.displayName}
                     </div>
-                    <div className="text-[11px] font-mono text-slate-500 truncate">
-                      {acc.email}
-                    </div>
+                    <div className="text-xs font-mono text-slate-500">{acc.email}</div>
                     <p className="text-xs text-slate-600 leading-relaxed pt-1">
                       {acc.accessSummary}
                     </p>
                   </div>
-                  <div className="text-xs font-semibold text-emerald-800 group-hover:underline">
+                  <div className="px-4 py-2.5 bg-emerald-800 group-hover:bg-emerald-900 text-white text-xs font-semibold rounded-lg whitespace-nowrap shrink-0 text-center">
                     Masuk ke Dasbor →
                   </div>
                 </button>
@@ -447,28 +444,14 @@ function SimsShell() {
 
           <div className="flex items-center gap-2.5 shrink-0">
             {isQuickSession && (
-              <>
-                <select
-                  aria-label="Ganti Akun Masuk Langsung"
-                  value={activeQuickAccountId || 'qa_super_admin'}
-                  onChange={(e) => loginWithQuickAccount(e.target.value)}
-                  className="px-2.5 py-1.5 text-xs border border-emerald-300 rounded-lg bg-emerald-50 text-emerald-950 font-medium max-w-[200px]"
-                >
-                  {quickAccounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>
-                      Akun: {ROLE_LABELS[acc.role]}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={signInWithGoogle}
-                  disabled={signingIn}
-                  className="hidden sm:inline-flex items-center px-3 py-1.5 text-xs font-semibold text-emerald-900 border border-emerald-300 bg-white rounded-lg hover:bg-emerald-50 whitespace-nowrap shrink-0"
-                >
-                  {signingIn ? 'Menghubungkan...' : 'Hubungkan Google'}
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={signInWithGoogle}
+                disabled={signingIn}
+                className="hidden sm:inline-flex items-center px-3 py-1.5 text-xs font-semibold text-emerald-900 border border-emerald-300 bg-white rounded-lg hover:bg-emerald-50 whitespace-nowrap shrink-0"
+              >
+                {signingIn ? 'Menghubungkan...' : 'Hubungkan Google'}
+              </button>
             )}
 
             {userAccount.role === 'super_admin' && (

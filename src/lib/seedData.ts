@@ -282,88 +282,15 @@ export const DEFAULT_SUBJECTS: Subject[] = [
   { id: 'sub_asw', code: 'ASW', name: 'Ke-NU-an / Aswaja', category: 'Muatan Khas Pesantren', kkm: 80, hoursPerWeek: 2, authorUid: 'system' },
 ];
 
-export const DEFAULT_TEACHERS: TeacherStaff[] = [
-  { id: 'tch_1', nip: '197504122005011002', name: 'SALIM, S.Pd., M.Pd', staffType: 'guru', position: 'Kepala Sekolah', subjectName: 'Pendidikan Kewarganegaraan', employmentStatus: 'GTY', email: 'kepsek@smadukepohbaru.sch.id', phone: '081234500001', authorUid: 'system' },
-  { id: 'tch_2', nip: '198407152010011008', name: 'Muhajir, S.Pd., M.Pd.', staffType: 'guru', position: 'Waka Kurikulum', subjectName: 'Matematika', employmentStatus: 'GTY', email: 'muhajir52@guru.sma.belajar.id', phone: '081234500002', authorUid: 'system' },
-  { id: 'tch_3', nip: '198903222014022003', name: 'Siti Aminah, S.Pd.', staffType: 'guru', position: 'Waka Kesiswaan & Wali Kelas', subjectName: 'Bahasa Indonesia', employmentStatus: 'GTY', email: 'aminah@smadukepohbaru.sch.id', phone: '081234500003', authorUid: 'system' },
-  { id: 'tch_4', nip: '199108112018011004', name: 'M. Sholihin, S.T.', staffType: 'guru', position: 'Waka Sarpras', subjectName: 'Informatika', employmentStatus: 'GTY', email: 'sholihin@smadukepohbaru.sch.id', phone: '081234500004', authorUid: 'system' },
-  { id: 'tch_5', nip: '198711022015032001', name: 'Nurul Hidayah, S.E.', staffType: 'tendik', position: 'Kepala Tata Usaha', subjectName: 'Administrasi Sekolah', employmentStatus: 'PTY', email: 'tu@smadukepohbaru.sch.id', phone: '081234500005', authorUid: 'system' },
-];
+export const DEFAULT_TEACHERS: TeacherStaff[] = [];
 
-export const DEFAULT_STUDENTS: Student[] = [
-  { id: 'std_1', nis: '2026001', nisn: '0098123401', name: 'Ahmad Fauzan Hakim', gender: 'L', classId: 'cls_xi_ipa_1', className: 'XI IPA 1', academicYearName: '2026/2027', status: 'aktif', parentName: 'H. Abdullah Hakim', parentEmail: 'hakim.wali@gmail.com', previousSchool: 'MTs Darul Ulum Kepohbaru', authorUid: 'system' },
-  { id: 'std_2', nis: '2026002', nisn: '0098123402', name: 'Nadia Putri Lestari', gender: 'P', classId: 'cls_xi_ipa_1', className: 'XI IPA 1', academicYearName: '2026/2027', status: 'aktif', parentName: 'Hj. Khadijah', parentEmail: 'khadijah.wali@gmail.com', previousSchool: 'SMPN 1 Kepohbaru', authorUid: 'system' },
-  { id: 'std_3', nis: '2026003', nisn: '0108123403', name: 'Muhammad Rizqi Pratama', gender: 'L', classId: 'cls_x_a', className: 'X-A', academicYearName: '2026/2027', status: 'aktif', parentName: 'Bapak Sutrisno', parentEmail: 'sutrisno.wali@gmail.com', previousSchool: 'SMPN 2 Kepohbaru', authorUid: 'system' },
-  { id: 'std_4', nis: '2026004', nisn: '0088123404', name: 'Aisyah Nur Hidayati', gender: 'P', classId: 'cls_xii_ipa_1', className: 'XII IPA 1', academicYearName: '2026/2027', status: 'aktif', parentName: 'Ibu Fatimah', parentEmail: 'fatimah.wali@gmail.com', previousSchool: 'MTsN 3 Bojonegoro', authorUid: 'system' },
-  { id: 'std_5', nis: '2026005', nisn: '0098123405', name: 'Dimas Arif Nugroho', gender: 'L', classId: 'cls_xi_ips_1', className: 'XI IPS 1', academicYearName: '2026/2027', status: 'aktif', parentName: 'Bapak Joko Susilo', parentEmail: 'joko.wali@gmail.com', previousSchool: 'SMP Islam Kepohbaru', authorUid: 'system' },
-];
+export const DEFAULT_STUDENTS: Student[] = [];
 
-export const DEFAULT_GRADES: GradeRecord[] = [
-  { id: 'grd_1', studentId: 'std_1', studentName: 'Ahmad Fauzan Hakim', classId: 'cls_xi_ipa_1', className: 'XI IPA 1', subjectName: 'Matematika', semester: 'Ganjil', academicYearName: '2026/2027', uhScore: 88, utsScore: 90, uasScore: 92, finalScore: 90, predicate: 'A', parentEmail: 'hakim.wali@gmail.com', authorUid: 'system' },
-  { id: 'grd_2', studentId: 'std_1', studentName: 'Ahmad Fauzan Hakim', classId: 'cls_xi_ipa_1', className: 'XI IPA 1', subjectName: 'Informatika', semester: 'Ganjil', academicYearName: '2026/2027', uhScore: 91, utsScore: 89, uasScore: 94, finalScore: 91, predicate: 'A', parentEmail: 'hakim.wali@gmail.com', authorUid: 'system' },
-  { id: 'grd_3', studentId: 'std_2', studentName: 'Nadia Putri Lestari', classId: 'cls_xi_ipa_1', className: 'XI IPA 1', subjectName: 'Matematika', semester: 'Ganjil', academicYearName: '2026/2027', uhScore: 95, utsScore: 94, uasScore: 96, finalScore: 95, predicate: 'A', parentEmail: 'khadijah.wali@gmail.com', authorUid: 'system' },
-  { id: 'grd_4', studentId: 'std_3', studentName: 'Muhammad Rizqi Pratama', classId: 'cls_x_a', className: 'X-A', subjectName: 'Bahasa Indonesia', semester: 'Ganjil', academicYearName: '2026/2027', uhScore: 82, utsScore: 84, uasScore: 85, finalScore: 84, predicate: 'B', parentEmail: 'sutrisno.wali@gmail.com', authorUid: 'system' },
-];
+export const DEFAULT_GRADES: GradeRecord[] = [];
 
-const SEED_TODAY = new Date().toISOString().slice(0, 10);
+export const DEFAULT_ATTENDANCE: AttendanceRecord[] = [];
 
-export const DEFAULT_ATTENDANCE: AttendanceRecord[] = [
-  {
-    id: 'att_seed_1',
-    date: SEED_TODAY,
-    studentId: 'std_1',
-    studentName: 'Ahmad Fauzan Hakim',
-    classId: 'cls_xi_ipa_1',
-    className: 'XI IPA 1',
-    subjectName: 'Matematika',
-    status: 'Hadir',
-    note: 'Hadir tepat waktu',
-    parentEmail: 'hakim.wali@gmail.com',
-    recordedByName: 'Muhajir, S.Pd., M.Pd.',
-    authorUid: 'system',
-  },
-  {
-    id: 'att_seed_2',
-    date: SEED_TODAY,
-    studentId: 'std_2',
-    studentName: 'Nadia Putri Lestari',
-    classId: 'cls_xi_ipa_1',
-    className: 'XI IPA 1',
-    subjectName: 'Matematika',
-    status: 'Izin',
-    note: 'Mengikuti pembinaan OSN Provinsi',
-    parentEmail: 'khadijah.wali@gmail.com',
-    recordedByName: 'Muhajir, S.Pd., M.Pd.',
-    authorUid: 'system',
-  },
-];
-
-export const DEFAULT_ATTENDANCE_NOTIFICATIONS: AttendanceNotification[] = [
-  {
-    id: 'notif_seed_1',
-    studentId: 'std_2',
-    studentName: 'Nadia Putri Lestari',
-    className: 'XI IPA 1',
-    parentEmail: 'khadijah.wali@gmail.com',
-    date: SEED_TODAY,
-    status: 'Izin',
-    message: `Ananda Nadia Putri Lestari (XI IPA 1) tercatat berstatus IZIN pada ${SEED_TODAY}. Keterangan: Mengikuti pembinaan OSN Provinsi.`,
-    isRead: false,
-    authorUid: 'system',
-  },
-  {
-    id: 'notif_seed_2',
-    studentId: 'std_1',
-    studentName: 'Ahmad Fauzan Hakim',
-    className: 'XI IPA 1',
-    parentEmail: 'hakim.wali@gmail.com',
-    date: SEED_TODAY,
-    status: 'Hadir',
-    message: `Ananda Ahmad Fauzan Hakim (XI IPA 1) tercatat HADIR tepat waktu pada ${SEED_TODAY} (Matematika).`,
-    isRead: false,
-    authorUid: 'system',
-  },
-];
+export const DEFAULT_ATTENDANCE_NOTIFICATIONS: AttendanceNotification[] = [];
 
 export const DEFAULT_ARCHIVE_FOLDERS: ArchiveFolder[] = [
   // Manajerial
@@ -562,11 +489,13 @@ export async function seedInitialDatabase(actorName: string): Promise<{ seeded: 
       updatedAt: serverTimestamp(),
     });
   });
-  batch2.set(doc(db, 'attendance_notifications', DEFAULT_ATTENDANCE_NOTIFICATIONS[0].id), {
-    ...DEFAULT_ATTENDANCE_NOTIFICATIONS[0],
-    authorUid: uid,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+  DEFAULT_ATTENDANCE_NOTIFICATIONS.forEach(({ id, ...rest }) => {
+    batch2.set(doc(db, 'attendance_notifications', id), {
+      ...rest,
+      authorUid: uid,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
   });
   await batch2.commit();
 

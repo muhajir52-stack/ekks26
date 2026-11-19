@@ -445,6 +445,38 @@ export function AcademicModule() {
     }
   };
 
+  const handleDeleteTeacher = async (t: TeacherStaff) => {
+    if (isQuickSession) {
+      const nextList = teachers.filter((item) => item.id !== t.id);
+      setTeachers(nextList);
+      saveQuickData(QUICK_KEYS.TEACHERS, nextList);
+      appendQuickActivityLog({
+        actorUid: userAccount?.uid,
+        actorName: userAccount?.displayName || 'Admin',
+        actorRole: effectiveRole,
+        action: 'Hapus Data GTK',
+        module: 'Akademik',
+        details: `Menghapus data GTK ${t.name} (${t.nip}).`,
+      });
+      setFeedback(`Data GTK ${t.name} dihapus.`);
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, 'teachers', t.id));
+      await logActivity({
+        actorName: userAccount?.displayName || 'Admin',
+        actorRole: effectiveRole,
+        action: 'Hapus Data GTK',
+        module: 'Akademik',
+        details: `Menghapus data GTK ${t.name} (${t.nip}).`,
+      });
+      setFeedback(`Data GTK ${t.name} dihapus.`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `teachers/${t.id}`);
+    }
+  };
+
   const handleAddClass = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userAccount || !classForm.name.trim()) return;
@@ -660,6 +692,38 @@ export function AcademicModule() {
     }
   };
 
+  const handleDeleteGrade = async (g: GradeRecord) => {
+    if (isQuickSession) {
+      const nextList = grades.filter((item) => item.id !== g.id);
+      setGrades(nextList);
+      saveQuickData(QUICK_KEYS.GRADES, nextList);
+      appendQuickActivityLog({
+        actorUid: userAccount?.uid,
+        actorName: userAccount?.displayName || 'Admin',
+        actorRole: effectiveRole,
+        action: 'Hapus Nilai Akademik',
+        module: 'Akademik',
+        details: `Menghapus nilai ${g.subjectName} milik ${g.studentName}.`,
+      });
+      setFeedback(`Nilai ${g.subjectName} milik ${g.studentName} dihapus.`);
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, 'grades', g.id));
+      await logActivity({
+        actorName: userAccount?.displayName || 'Admin',
+        actorRole: effectiveRole,
+        action: 'Hapus Nilai Akademik',
+        module: 'Akademik',
+        details: `Menghapus nilai ${g.subjectName} milik ${g.studentName}.`,
+      });
+      setFeedback(`Nilai ${g.subjectName} milik ${g.studentName} dihapus.`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `grades/${g.id}`);
+    }
+  };
+
   const filteredStudents = students.filter((s) => {
     const q = search.trim().toLowerCase();
     const matchText =
@@ -822,8 +886,10 @@ export function AcademicModule() {
               <tbody className="divide-y divide-slate-200">
                 {filteredStudents.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-slate-500">
-                      Belum ada data siswa yang cocok dengan filter.
+                    <td colSpan={7} className="py-10 text-center text-slate-500">
+                      {students.length === 0
+                        ? 'Daftar siswa masih kosong. Klik "+ Tambah Siswa" atau "Impor Excel" untuk menambahkan data secara manual.'
+                        : 'Belum ada data siswa yang cocok dengan filter.'}
                     </td>
                   </tr>
                 ) : (
@@ -927,19 +993,41 @@ export function AcademicModule() {
                   <th className="py-2.5 px-3 font-semibold">Jabatan</th>
                   <th className="py-2.5 px-3 font-semibold">Bidang / Mapel</th>
                   <th className="py-2.5 px-3 font-semibold">Status</th>
+                  <th className="py-2.5 px-3 font-semibold text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {filteredTeachers.map((t) => (
-                  <tr key={t.id} className="hover:bg-slate-50">
-                    <td className="py-2.5 px-3 font-tabular text-xs">{t.nip}</td>
-                    <td className="py-2.5 px-3 font-medium text-slate-900">{t.name}</td>
-                    <td className="py-2.5 px-3 text-xs capitalize">{t.staffType}</td>
-                    <td className="py-2.5 px-3 text-xs">{t.position}</td>
-                    <td className="py-2.5 px-3 text-xs text-slate-600">{t.subjectName || '-'}</td>
-                    <td className="py-2.5 px-3 text-xs font-semibold">{t.employmentStatus}</td>
+                {filteredTeachers.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-10 text-center text-slate-500">
+                      {teachers.length === 0
+                        ? 'Daftar guru & tenaga kependidikan masih kosong. Klik "+ Tambah GTK" untuk menambahkan secara manual.'
+                        : 'Belum ada data GTK yang cocok dengan pencarian.'}
+                    </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredTeachers.map((t) => (
+                    <tr key={t.id} className="hover:bg-slate-50">
+                      <td className="py-2.5 px-3 font-tabular text-xs">{t.nip}</td>
+                      <td className="py-2.5 px-3 font-medium text-slate-900">{t.name}</td>
+                      <td className="py-2.5 px-3 text-xs capitalize">{t.staffType}</td>
+                      <td className="py-2.5 px-3 text-xs">{t.position}</td>
+                      <td className="py-2.5 px-3 text-xs text-slate-600">{t.subjectName || '-'}</td>
+                      <td className="py-2.5 px-3 text-xs font-semibold">{t.employmentStatus}</td>
+                      <td className="py-2.5 px-3 text-right">
+                        {canManageMaster && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTeacher(t)}
+                            className="inline-flex items-center gap-1 text-xs font-medium text-red-700 hover:underline"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Hapus
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -1192,22 +1280,44 @@ export function AcademicModule() {
                   <th className="py-2.5 px-3 font-semibold text-right">UAS</th>
                   <th className="py-2.5 px-3 font-semibold text-right">Nilai Akhir</th>
                   <th className="py-2.5 px-3 font-semibold text-center">Predikat</th>
+                  <th className="py-2.5 px-3 font-semibold text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 font-tabular">
-                {filteredGrades.map((g) => (
-                  <tr key={g.id} className="hover:bg-slate-50">
-                    <td className="py-2.5 px-3 font-sans font-medium text-slate-900">{g.studentName}</td>
-                    <td className="py-2.5 px-3 font-sans text-xs">{g.className}</td>
-                    <td className="py-2.5 px-3 font-sans text-xs">{g.subjectName}</td>
-                    <td className="py-2.5 px-3 font-sans text-xs">{g.semester}</td>
-                    <td className="py-2.5 px-3 text-right">{g.uhScore ?? '-'}</td>
-                    <td className="py-2.5 px-3 text-right">{g.utsScore ?? '-'}</td>
-                    <td className="py-2.5 px-3 text-right">{g.uasScore ?? '-'}</td>
-                    <td className="py-2.5 px-3 text-right font-semibold text-emerald-900">{g.finalScore}</td>
-                    <td className="py-2.5 px-3 text-center font-semibold">{g.predicate}</td>
+                {filteredGrades.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} className="py-10 text-center font-sans text-slate-500">
+                      {grades.length === 0
+                        ? 'Daftar nilai & rekap masih kosong. Tambahkan data siswa terlebih dahulu lalu klik "+ Input Nilai".'
+                        : 'Belum ada data nilai yang cocok dengan filter.'}
+                    </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredGrades.map((g) => (
+                    <tr key={g.id} className="hover:bg-slate-50">
+                      <td className="py-2.5 px-3 font-sans font-medium text-slate-900">{g.studentName}</td>
+                      <td className="py-2.5 px-3 font-sans text-xs">{g.className}</td>
+                      <td className="py-2.5 px-3 font-sans text-xs">{g.subjectName}</td>
+                      <td className="py-2.5 px-3 font-sans text-xs">{g.semester}</td>
+                      <td className="py-2.5 px-3 text-right">{g.uhScore ?? '-'}</td>
+                      <td className="py-2.5 px-3 text-right">{g.utsScore ?? '-'}</td>
+                      <td className="py-2.5 px-3 text-right">{g.uasScore ?? '-'}</td>
+                      <td className="py-2.5 px-3 text-right font-semibold text-emerald-900">{g.finalScore}</td>
+                      <td className="py-2.5 px-3 text-center font-semibold">{g.predicate}</td>
+                      <td className="py-2.5 px-3 text-right font-sans">
+                        {canManageGrades && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteGrade(g)}
+                            className="inline-flex items-center gap-1 text-xs font-medium text-red-700 hover:underline"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Hapus
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -1482,18 +1592,24 @@ export function AcademicModule() {
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">Siswa</label>
-              <select
-                required
-                value={gradeForm.studentId}
-                onChange={(e) => setGradeForm({ ...gradeForm, studentId: e.target.value })}
-                className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg"
-              >
-                {students.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.className})
-                  </option>
-                ))}
-              </select>
+              {students.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg">
+                  Belum ada data siswa. Tambahkan siswa terlebih dahulu pada tab Master Siswa.
+                </div>
+              ) : (
+                <select
+                  required
+                  value={gradeForm.studentId}
+                  onChange={(e) => setGradeForm({ ...gradeForm, studentId: e.target.value })}
+                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg"
+                >
+                  {students.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.className})
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -1561,7 +1677,11 @@ export function AcademicModule() {
               <button type="button" onClick={() => setShowGradeModal(false)} className="px-4 py-2 text-xs border rounded-lg">
                 Batal
               </button>
-              <button type="submit" className="px-4 py-2 text-xs font-semibold bg-emerald-800 text-white rounded-lg">
+              <button
+                type="submit"
+                disabled={students.length === 0}
+                className="px-4 py-2 text-xs font-semibold bg-emerald-800 text-white rounded-lg disabled:opacity-50"
+              >
                 Simpan Nilai
               </button>
             </div>

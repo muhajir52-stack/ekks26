@@ -6,6 +6,7 @@ import {
   DEFAULT_QUICK_INDICATORS,
   DEFAULT_QUICK_INSTRUMENTS,
   DEFAULT_QUICK_SUPERVISION_ASSESSMENTS,
+  DEFAULT_QUICK_SUPERVISION_OFFICERS,
   loadQuickData,
   loadQuickRecord,
   QUICK_KEYS,
@@ -51,6 +52,7 @@ import type {
   SupervisionAssessment,
   SupervisionIndicator,
   SupervisionInstrument,
+  SupervisionOfficer,
   SupervisionSchedule,
   TeacherStaff,
   UserAccount,
@@ -121,6 +123,7 @@ export const BACKUP_COLLECTION_GROUPS = [
       { key: 'supervision_indicators', label: 'Butir Indikator' },
       { key: 'supervision_schedules', label: 'Jadwal Supervisi' },
       { key: 'supervision_assessments', label: 'Hasil Penilaian' },
+      { key: 'supervision_officers', label: 'Petugas Supervisor' },
     ],
   },
   {
@@ -283,6 +286,10 @@ export async function generateFullSystemBackup(options: {
       supervision_assessments: loadQuickData<SupervisionAssessment>(
         QUICK_KEYS.SUPERVISION_ASSESSMENTS,
         DEFAULT_QUICK_SUPERVISION_ASSESSMENTS
+      ),
+      supervision_officers: loadQuickData<SupervisionOfficer>(
+        QUICK_KEYS.SUPERVISION_OFFICERS,
+        DEFAULT_QUICK_SUPERVISION_OFFICERS
       ),
       users: loadQuickData<UserAccount>('sims_quick_users', defaultQuickUsers),
       activity_logs: loadQuickData<ActivityLog>(QUICK_KEYS.ACTIVITY_LOGS, DEFAULT_QUICK_ACTIVITY_LOGS),

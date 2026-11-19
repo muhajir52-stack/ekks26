@@ -1,4 +1,10 @@
-import type { ActivityLog, SupervisionAssessment, SupervisionIndicator, SupervisionInstrument } from '../types/sims';
+import type {
+  ActivityLog,
+  SupervisionAssessment,
+  SupervisionIndicator,
+  SupervisionInstrument,
+  SupervisionOfficer,
+} from '../types/sims';
 import {
   GURU_SUPERVISION_INDICATORS,
   GURU_SUPERVISION_INSTRUMENT,
@@ -23,6 +29,7 @@ export const QUICK_KEYS = {
   SUPERVISION_INDICATORS: 'sims_quick_supervision_indicators',
   SUPERVISION_SCHEDULES: 'sims_quick_supervision_schedules',
   SUPERVISION_ASSESSMENTS: 'sims_quick_supervision_assessments',
+  SUPERVISION_OFFICERS: 'sims_quick_supervision_officers',
   ACTIVITY_LOGS: 'sims_quick_activity_logs',
   SCHOOL_CONTENT: 'sims_quick_school_content',
   NEWS: 'sims_quick_news',
@@ -142,6 +149,27 @@ export const DEFAULT_QUICK_SUPERVISION_ASSESSMENTS: SupervisionAssessment[] = [
     followUpPlan: 'Finalisasi verifikasi instrumen bersama tim penjaminan mutu sekolah.',
     followUpDeadline: '2026-12-05',
     status: 'Draft',
+    authorUid: 'system',
+  },
+];
+
+export const DEFAULT_QUICK_SUPERVISION_OFFICERS: SupervisionOfficer[] = [
+  {
+    id: 'off_seed_pengawas_tpm',
+    name: 'Pengawas Pembina & Tim Penjaminan Mutu',
+    unit: 'Pengawas Pembina & Tim Penjaminan Mutu',
+    nip: '-',
+    institution: 'Cabang Dinas Pendidikan & TPMPS SMA Darul Ulum Kepohbaru',
+    isActive: true,
+    authorUid: 'system',
+  },
+  {
+    id: 'off_seed_kepsek',
+    name: 'SALIM, S.Pd., M.Pd',
+    unit: 'Kepala Sekolah',
+    nip: '-',
+    institution: 'SMA Darul Ulum Kepohbaru',
+    isActive: true,
     authorUid: 'system',
   },
 ];

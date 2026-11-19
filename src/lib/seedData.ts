@@ -35,6 +35,7 @@ import type {
   Student,
   Subject,
   SupervisionSchedule,
+  SupervisionOfficer,
   TeacherStaff,
 } from '../types/sims';
 import { logActivity } from './audit';
@@ -397,6 +398,27 @@ export const DEFAULT_SUPERVISION_SCHEDULES: SupervisionSchedule[] = [
   },
 ];
 
+export const DEFAULT_SUPERVISION_OFFICERS: SupervisionOfficer[] = [
+  {
+    id: 'off_seed_pengawas_tpm',
+    name: 'Pengawas Pembina & Tim Penjaminan Mutu',
+    unit: 'Pengawas Pembina & Tim Penjaminan Mutu',
+    nip: '-',
+    institution: 'Cabang Dinas Pendidikan & TPMPS SMA Darul Ulum Kepohbaru',
+    isActive: true,
+    authorUid: 'system',
+  },
+  {
+    id: 'off_seed_kepsek',
+    name: 'SALIM, S.Pd., M.Pd',
+    unit: 'Kepala Sekolah',
+    nip: '-',
+    institution: 'SMA Darul Ulum Kepohbaru',
+    isActive: true,
+    authorUid: 'system',
+  },
+];
+
 export async function seedInitialDatabase(actorName: string): Promise<{ seeded: boolean; message: string }> {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error('Pengguna belum terautentikasi.');
@@ -567,6 +589,15 @@ export async function seedInitialDatabase(actorName: string): Promise<{ seeded: 
 
   DEFAULT_SUPERVISION_SCHEDULES.forEach(({ id, ...rest }) => {
     batch4.set(doc(db, 'supervision_schedules', id), {
+      ...rest,
+      authorUid: uid,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  });
+
+  DEFAULT_SUPERVISION_OFFICERS.forEach(({ id, ...rest }) => {
+    batch4.set(doc(db, 'supervision_officers', id), {
       ...rest,
       authorUid: uid,
       createdAt: serverTimestamp(),

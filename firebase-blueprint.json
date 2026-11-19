@@ -403,6 +403,8 @@
         "assessedPersonRole": { "type": "string", "maxLength": 60 },
         "assessedPersonEmail": { "type": "string", "maxLength": 180 },
         "supervisorName": { "type": "string", "maxLength": 140 },
+        "supervisorNip": { "type": "string", "maxLength": 40 },
+        "supervisorSignatureUrl": { "type": "string", "maxLength": 200000 },
         "academicYearName": { "type": "string", "maxLength": 30 },
         "period": { "type": "string", "maxLength": 60 },
         "itemScores": { "type": "object" },
@@ -422,6 +424,23 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["instrumentId", "instrumentTitle", "schoolName", "assessedPersonName", "supervisorName", "academicYearName", "period", "overallScore", "overallMaxScore", "overallPercentage", "overallPredicate", "unfilledCount", "status", "authorUid", "createdAt", "updatedAt"]
+    },
+    "SupervisionOfficer": {
+      "title": "SupervisionOfficer",
+      "description": "Daftar petugas supervisor (Pengawas Pembina, Tim Penjaminan Mutu, Kepala Sekolah, dan Supervisor Internal).",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 140 },
+        "unit": { "type": "string", "enum": ["Pengawas Pembina", "Tim Penjaminan Mutu", "Pengawas Pembina & Tim Penjaminan Mutu", "Kepala Sekolah", "Tim Supervisor Internal"] },
+        "nip": { "type": "string", "maxLength": 40 },
+        "institution": { "type": "string", "maxLength": 180 },
+        "signatureDataUrl": { "type": "string", "maxLength": 200000 },
+        "isActive": { "type": "boolean" },
+        "authorUid": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "unit", "isActive", "authorUid", "createdAt", "updatedAt"]
     },
     "ActivityLog": {
       "title": "ActivityLog",
@@ -527,6 +546,10 @@
     "/supervision_assessments/{assessmentId}": {
       "schema": { "$ref": "#/entities/SupervisionAssessment" },
       "description": "Hasil penilaian, catatan, dan tindak lanjut supervisi."
+    },
+    "/supervision_officers/{officerId}": {
+      "schema": { "$ref": "#/entities/SupervisionOfficer" },
+      "description": "Master petugas supervisor (Pengawas Pembina & Tim Penjaminan Mutu)."
     },
     "/activity_logs/{logId}": {
       "schema": { "$ref": "#/entities/ActivityLog" },

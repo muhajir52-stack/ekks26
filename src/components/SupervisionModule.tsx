@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   collection,
   addDoc,
+  deleteDoc,
   doc,
   getDocs,
   onSnapshot,
@@ -16,13 +17,18 @@ import {
   FileSpreadsheet,
   FileText,
   Link2,
+  PenTool,
   Plus,
   RefreshCw,
   Save,
   Search,
   ShieldCheck,
+  Trash2,
+  UserCheck,
+  UserPlus,
   X,
 } from 'lucide-react';
+import { SignaturePad } from './SignaturePad';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 import { logActivity } from '../lib/audit';
@@ -32,6 +38,7 @@ import {
   DEFAULT_QUICK_INDICATORS,
   DEFAULT_QUICK_INSTRUMENTS,
   DEFAULT_QUICK_SUPERVISION_ASSESSMENTS,
+  DEFAULT_QUICK_SUPERVISION_OFFICERS,
   loadQuickData,
   nextQuickId,
   QUICK_KEYS,
@@ -56,10 +63,12 @@ import type {
   SupervisionIndicator,
   SupervisionInstrument,
   SupervisionItemScore,
+  SupervisionOfficer,
+  SupervisionOfficerUnit,
   SupervisionSchedule,
 } from '../types/sims';
 
-type SupervisionTab = 'assessments' | 'schedules' | 'instruments' | 'recap';
+type SupervisionTab = 'assessments' | 'schedules' | 'officers' | 'instruments' | 'recap';
 
 export function SupervisionModule() {
   const { userAccount, effectiveRole, isQuickSession } = useAuth();
@@ -69,6 +78,7 @@ export function SupervisionModule() {
   const [indicators, setIndicators] = useState<SupervisionIndicator[]>([]);
   const [schedules, setSchedules] = useState<SupervisionSchedule[]>([]);
   const [assessments, setAssessments] = useState<SupervisionAssessment[]>([]);
+  const [officers, setOfficers] = useState<SupervisionOfficer[]>([]);
   const [archives, setArchives] = useState<DigitalArchive[]>([]);
 
   // Active assessment editor state
@@ -76,6 +86,7 @@ export function SupervisionModule() {
   const [activeSheetCode, setActiveSheetCode] = useState<string>('utama');
   const [itemScores, setItemScores] = useState<Record<string, SupervisionItemScore>>({});
   const [sheetNotes, setSheetNotes] = useState<Record<string, string>>({});
+  const [editingSupervisorName, setEditingSupervisorName] = useState('');
   const [recommendations, setRecommendations] = useState('');
   const [followUpPlan, setFollowUpPlan] = useState('');
   const [followUpDeadline, setFollowUpDeadline] = useState('');
@@ -117,6 +128,26 @@ export function SupervisionModule() {
     supervisorName: '',
   });
 
+  const [showOfficerModal, setShowOfficerModal] = useState(false);
+  const [officerForm, setOfficerForm] = useState({
+    name: '',
+    unit: 'Pengawas Pembina & Tim Penjaminan Mutu' as SupervisionOfficerUnit,
+    nip: '',
+    institution: 'SMA Darul Ulum Kepohbaru',
+    signatureDataUrl: '',
+  });
+
+  const [signatureTargetAssessment, setSignatureTargetAssessment] =
+    useState<SupervisionAssessment | null>(null);
+  const [signatureDraftForm, setSignatureDraftForm] = useState({
+    supervisorName: '',
+    supervisorNip: '',
+    signatureDataUrl: '',
+  });
+  const [editingOfficerSignature, setEditingOfficerSignature] =
+    useState<SupervisionOfficer | null>(null);
+  const [officerSigDraft, setOfficerSigDraft] = useState('');
+
   const [selectedMasterInstId, setSelectedMasterInstId] = useState<string>('inst_pkks_2026');
   const [selectedMasterSheet, setSelectedMasterSheet] = useState<string>('utama');
   const [syncingMaster, setSyncingMaster] = useState(false);
@@ -141,6 +172,9 @@ export function SupervisionModule() {
           QUICK_KEYS.SUPERVISION_ASSESSMENTS,
           DEFAULT_QUICK_SUPERVISION_ASSESSMENTS
         )
+      );
+      setOfficers(
+        loadQuickData(QUICK_KEYS.SUPERVISION_OFFICERS, DEFAULT_QUICK_SUPERVISION_OFFICERS)
       );
       setArchives(loadQuickData(QUICK_KEYS.DIGITAL_ARCHIVES, DEFAULT_DIGITAL_ARCHIVES));
       return;
@@ -194,6 +228,17 @@ export function SupervisionModule() {
         (e) => handleFirestoreError(e, OperationType.LIST, 'supervision_assessments')
       ),
       onSnapshot(
+        collection(db, 'supervision_officers'),
+        (s) =>
+          setOfficers(
+            s.docs.map((d) => ({
+              id: d.id,
+              ...(d.data() as Omit<SupervisionOfficer, 'id'>),
+            }))
+          ),
+        (e) => handleFirestoreError(e, OperationType.LIST, 'supervision_officers')
+      ),
+      onSnapshot(
         collection(db, 'digital_archives'),
         (s) =>
           setArchives(
@@ -245,6 +290,7 @@ export function SupervisionModule() {
     setActiveSheetCode(firstSheet);
     setItemScores(assessment.itemScores || {});
     setSheetNotes(assessment.sheetNotes || {});
+    setEditingSupervisorName(assessment.supervisorName || '');
     setRecommendations(assessment.recommendations || '');
     setFollowUpPlan(assessment.followUpPlan || '');
     setFollowUpDeadline(assessment.followUpDeadline || '');
@@ -681,8 +727,10 @@ export function SupervisionModule() {
     setFeedback(null);
 
     if (isQuickSession) {
+      const nextSupName = editingSupervisorName.trim() || activeAssessment.supervisorName;
       const updatedAssessment: SupervisionAssessment = {
         ...activeAssessment,
+        supervisorName: nextSupName,
         itemScores,
         sheetNotes,
         ...overallCalculation,
@@ -705,7 +753,9 @@ export function SupervisionModule() {
             ? 'Selesai'
             : 'Berlangsung';
         const nextSchedules = schedules.map((s) =>
-          s.id === activeAssessment.scheduleId ? { ...s, status: nextSchedStatus } : s
+          s.id === activeAssessment.scheduleId
+            ? { ...s, status: nextSchedStatus, supervisorName: nextSupName }
+            : s
         );
         setSchedules(nextSchedules);
         saveQuickData(QUICK_KEYS.SUPERVISION_SCHEDULES, nextSchedules);
@@ -720,7 +770,7 @@ export function SupervisionModule() {
             ? 'Validasi Hasil Supervisi'
             : 'Simpan Penilaian Supervisi',
         module: 'Supervisi Digital',
-        details: `${activeAssessment.assessedPersonName} — Nilai ${overallCalculation.overallPercentage}% (${overallCalculation.overallPredicate}), Status: ${targetStatus}.`,
+        details: `${activeAssessment.assessedPersonName} — Supervisor: ${nextSupName}, Nilai ${overallCalculation.overallPercentage}% (${overallCalculation.overallPredicate}), Status: ${targetStatus}.`,
       });
       setFeedback(`Penilaian supervisi berhasil disimpan dengan status ${targetStatus}.`);
       setSaving(false);
@@ -728,7 +778,9 @@ export function SupervisionModule() {
     }
 
     try {
+      const nextSupName = editingSupervisorName.trim() || activeAssessment.supervisorName;
       const updatePayload: Record<string, unknown> = {
+        supervisorName: nextSupName,
         itemScores,
         sheetNotes,
         overallScore: overallCalculation.overallScore,
@@ -749,6 +801,7 @@ export function SupervisionModule() {
       await updateDoc(doc(db, 'supervision_assessments', activeAssessment.id), updatePayload);
       if (activeAssessment.scheduleId) {
         await updateDoc(doc(db, 'supervision_schedules', activeAssessment.scheduleId), {
+          supervisorName: nextSupName,
           status: targetStatus === 'Disetujui' ? 'Disetujui' : targetStatus === 'Selesai' ? 'Selesai' : 'Berlangsung',
           updatedAt: serverTimestamp(),
         });
@@ -756,6 +809,7 @@ export function SupervisionModule() {
 
       setActiveAssessment({
         ...activeAssessment,
+        supervisorName: nextSupName,
         itemScores,
         sheetNotes,
         ...overallCalculation,
@@ -774,7 +828,7 @@ export function SupervisionModule() {
             ? 'Validasi Hasil Supervisi'
             : 'Simpan Penilaian Supervisi',
         module: 'Supervisi Digital',
-        details: `${activeAssessment.assessedPersonName} — Nilai ${overallCalculation.overallPercentage}% (${overallCalculation.overallPredicate}), Status: ${targetStatus}.`,
+        details: `${activeAssessment.assessedPersonName} — Supervisor: ${nextSupName}, Nilai ${overallCalculation.overallPercentage}% (${overallCalculation.overallPredicate}), Status: ${targetStatus}.`,
       });
       setFeedback(`Penilaian supervisi berhasil disimpan dengan status ${targetStatus}.`);
     } catch (err) {
@@ -890,6 +944,294 @@ export function SupervisionModule() {
     }
   };
 
+  const formatOfficerLabel = (off: SupervisionOfficer): string => {
+    const cleanName = off.name.trim();
+    if (!cleanName) return off.unit;
+    if (cleanName.toLowerCase() === off.unit.toLowerCase()) return cleanName;
+    return `${off.unit}: ${cleanName}`;
+  };
+
+  const activeOfficers = useMemo(
+    () => officers.filter((o) => o.isActive),
+    [officers]
+  );
+
+  const handleCreateOfficer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userAccount || !canSupervise) return;
+    const cleanName = officerForm.name.trim().slice(0, 140);
+    if (!cleanName) return;
+    const cleanNip = officerForm.nip.trim().slice(0, 40);
+    const cleanInstitution = officerForm.institution.trim().slice(0, 180);
+    const cleanSignature = officerForm.signatureDataUrl || '';
+
+    if (isQuickSession) {
+      const created: SupervisionOfficer = {
+        id: nextQuickId('off'),
+        name: cleanName,
+        unit: officerForm.unit,
+        nip: cleanNip,
+        institution: cleanInstitution,
+        signatureDataUrl: cleanSignature,
+        isActive: true,
+        authorUid: userAccount.uid,
+      };
+      const nextList = [created, ...officers];
+      setOfficers(nextList);
+      saveQuickData(QUICK_KEYS.SUPERVISION_OFFICERS, nextList);
+      appendQuickActivityLog({
+        actorUid: userAccount.uid,
+        actorName: userAccount.displayName,
+        actorRole: effectiveRole,
+        action: 'Tambah Petugas Supervisor',
+        module: 'Supervisi Digital',
+        details: `Menambahkan petugas supervisor ${created.name} (${created.unit}).`,
+      });
+      setOfficerForm({
+        name: '',
+        unit: 'Pengawas Pembina & Tim Penjaminan Mutu',
+        nip: '',
+        institution: 'SMA Darul Ulum Kepohbaru',
+        signatureDataUrl: '',
+      });
+      setShowOfficerModal(false);
+      setFeedback(`Petugas supervisor "${cleanName}" (${officerForm.unit}) berhasil ditambahkan.`);
+      return;
+    }
+
+    try {
+      await addDoc(collection(db, 'supervision_officers'), {
+        name: cleanName,
+        unit: officerForm.unit,
+        nip: cleanNip,
+        institution: cleanInstitution,
+        signatureDataUrl: cleanSignature,
+        isActive: true,
+        authorUid: userAccount.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      await logActivity({
+        actorName: userAccount.displayName,
+        actorRole: effectiveRole,
+        action: 'Tambah Petugas Supervisor',
+        module: 'Supervisi Digital',
+        details: `Menambahkan petugas supervisor ${cleanName} (${officerForm.unit}).`,
+      });
+      setOfficerForm({
+        name: '',
+        unit: 'Pengawas Pembina & Tim Penjaminan Mutu',
+        nip: '',
+        institution: 'SMA Darul Ulum Kepohbaru',
+        signatureDataUrl: '',
+      });
+      setShowOfficerModal(false);
+      setFeedback(`Petugas supervisor "${cleanName}" (${officerForm.unit}) berhasil ditambahkan.`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'supervision_officers');
+    }
+  };
+
+  const handleToggleOfficerActive = async (off: SupervisionOfficer) => {
+    if (!userAccount || !canSupervise) return;
+    const nextActive = !off.isActive;
+    if (isQuickSession) {
+      const nextList = officers.map((item) =>
+        item.id === off.id ? { ...item, isActive: nextActive } : item
+      );
+      setOfficers(nextList);
+      saveQuickData(QUICK_KEYS.SUPERVISION_OFFICERS, nextList);
+      setFeedback(
+        `Status petugas supervisor "${off.name}" diubah menjadi ${nextActive ? 'Aktif' : 'Nonaktif'}.`
+      );
+      return;
+    }
+
+    try {
+      await updateDoc(doc(db, 'supervision_officers', off.id), {
+        isActive: nextActive,
+        updatedAt: serverTimestamp(),
+      });
+      setFeedback(
+        `Status petugas supervisor "${off.name}" diubah menjadi ${nextActive ? 'Aktif' : 'Nonaktif'}.`
+      );
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `supervision_officers/${off.id}`);
+    }
+  };
+
+  const handleDeleteOfficer = async (off: SupervisionOfficer) => {
+    if (!userAccount || !canSupervise) return;
+    if (isQuickSession) {
+      const nextList = officers.filter((item) => item.id !== off.id);
+      setOfficers(nextList);
+      saveQuickData(QUICK_KEYS.SUPERVISION_OFFICERS, nextList);
+      appendQuickActivityLog({
+        actorUid: userAccount.uid,
+        actorName: userAccount.displayName,
+        actorRole: effectiveRole,
+        action: 'Hapus Petugas Supervisor',
+        module: 'Supervisi Digital',
+        details: `Menghapus petugas supervisor ${off.name} (${off.unit}).`,
+      });
+      setFeedback(`Petugas supervisor "${off.name}" berhasil dihapus.`);
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, 'supervision_officers', off.id));
+      await logActivity({
+        actorName: userAccount.displayName,
+        actorRole: effectiveRole,
+        action: 'Hapus Petugas Supervisor',
+        module: 'Supervisi Digital',
+        details: `Menghapus petugas supervisor ${off.name} (${off.unit}).`,
+      });
+      setFeedback(`Petugas supervisor "${off.name}" berhasil dihapus.`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `supervision_officers/${off.id}`);
+    }
+  };
+
+  const findMatchedOfficer = (supervisorName: string): SupervisionOfficer | undefined => {
+    const clean = supervisorName.trim().toLowerCase();
+    return officers.find(
+      (o) =>
+        formatOfficerLabel(o).toLowerCase() === clean ||
+        o.name.trim().toLowerCase() === clean
+    );
+  };
+
+  const openSignatureModal = (assessment: SupervisionAssessment) => {
+    const matched = findMatchedOfficer(assessment.supervisorName);
+    setSignatureTargetAssessment(assessment);
+    setSignatureDraftForm({
+      supervisorName: assessment.supervisorName,
+      supervisorNip: assessment.supervisorNip || matched?.nip || '',
+      signatureDataUrl: assessment.supervisorSignatureUrl || matched?.signatureDataUrl || '',
+    });
+  };
+
+  const handleSaveAssessmentSignature = async (exportPdfAfter: boolean) => {
+    if (!signatureTargetAssessment || !userAccount) return;
+    const nextSupName =
+      signatureDraftForm.supervisorName.trim().slice(0, 140) ||
+      signatureTargetAssessment.supervisorName;
+    const nextSupNip = signatureDraftForm.supervisorNip.trim().slice(0, 40);
+    const nextSigUrl = signatureDraftForm.signatureDataUrl || '';
+    const matched = findMatchedOfficer(nextSupName);
+
+    const updatedAssessment: SupervisionAssessment = {
+      ...signatureTargetAssessment,
+      supervisorName: nextSupName,
+      supervisorNip: nextSupNip,
+      supervisorSignatureUrl: nextSigUrl,
+    };
+
+    if (isQuickSession) {
+      const nextAssessments = assessments.map((a) =>
+        a.id === signatureTargetAssessment.id ? updatedAssessment : a
+      );
+      setAssessments(nextAssessments);
+      saveQuickData(QUICK_KEYS.SUPERVISION_ASSESSMENTS, nextAssessments);
+      if (activeAssessment?.id === signatureTargetAssessment.id) {
+        setActiveAssessment(updatedAssessment);
+        setEditingSupervisorName(nextSupName);
+      }
+      if (matched && nextSigUrl) {
+        const nextOfficers = officers.map((o) =>
+          o.id === matched.id ? { ...o, signatureDataUrl: nextSigUrl, nip: nextSupNip || o.nip } : o
+        );
+        setOfficers(nextOfficers);
+        saveQuickData(QUICK_KEYS.SUPERVISION_OFFICERS, nextOfficers);
+      }
+      appendQuickActivityLog({
+        actorUid: userAccount.uid,
+        actorName: userAccount.displayName,
+        actorRole: effectiveRole,
+        action: 'Bubuhkan Tanda Tangan Supervisor',
+        module: 'Supervisi Digital',
+        details: `Membubuhkan tanda tangan pengawas/supervisor (${nextSupName}) pada hasil supervisi ${signatureTargetAssessment.assessedPersonName}.`,
+      });
+      setFeedback(`Tanda tangan pengawas/supervisor untuk "${signatureTargetAssessment.assessedPersonName}" berhasil disimpan.`);
+      setSignatureTargetAssessment(null);
+      if (exportPdfAfter) {
+        const instInds = getIndicatorsForInstrument(updatedAssessment.instrumentId);
+        exportSupervisionToPDF(updatedAssessment, instInds, matched);
+      }
+      return;
+    }
+
+    try {
+      await updateDoc(doc(db, 'supervision_assessments', signatureTargetAssessment.id), {
+        supervisorName: nextSupName,
+        supervisorNip: nextSupNip,
+        supervisorSignatureUrl: nextSigUrl,
+        updatedAt: serverTimestamp(),
+      });
+      if (matched && nextSigUrl && canSupervise) {
+        await updateDoc(doc(db, 'supervision_officers', matched.id), {
+          signatureDataUrl: nextSigUrl,
+          nip: nextSupNip || matched.nip || '',
+          updatedAt: serverTimestamp(),
+        });
+      }
+      if (activeAssessment?.id === signatureTargetAssessment.id) {
+        setActiveAssessment(updatedAssessment);
+        setEditingSupervisorName(nextSupName);
+      }
+      await logActivity({
+        actorName: userAccount.displayName,
+        actorRole: effectiveRole,
+        action: 'Bubuhkan Tanda Tangan Supervisor',
+        module: 'Supervisi Digital',
+        details: `Membubuhkan tanda tangan pengawas/supervisor (${nextSupName}) pada hasil supervisi ${signatureTargetAssessment.assessedPersonName}.`,
+      });
+      setFeedback(`Tanda tangan pengawas/supervisor untuk "${signatureTargetAssessment.assessedPersonName}" berhasil disimpan.`);
+      setSignatureTargetAssessment(null);
+      if (exportPdfAfter) {
+        const instInds = getIndicatorsForInstrument(updatedAssessment.instrumentId);
+        exportSupervisionToPDF(updatedAssessment, instInds, matched);
+      }
+    } catch (err) {
+      handleFirestoreError(
+        err,
+        OperationType.UPDATE,
+        `supervision_assessments/${signatureTargetAssessment.id}`
+      );
+    }
+  };
+
+  const handleSaveOfficerSignature = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingOfficerSignature || !userAccount || !canSupervise) return;
+    if (isQuickSession) {
+      const nextList = officers.map((o) =>
+        o.id === editingOfficerSignature.id ? { ...o, signatureDataUrl: officerSigDraft } : o
+      );
+      setOfficers(nextList);
+      saveQuickData(QUICK_KEYS.SUPERVISION_OFFICERS, nextList);
+      setFeedback(`Tanda tangan petugas "${editingOfficerSignature.name}" berhasil disimpan.`);
+      setEditingOfficerSignature(null);
+      return;
+    }
+
+    try {
+      await updateDoc(doc(db, 'supervision_officers', editingOfficerSignature.id), {
+        signatureDataUrl: officerSigDraft,
+        updatedAt: serverTimestamp(),
+      });
+      setFeedback(`Tanda tangan petugas "${editingOfficerSignature.name}" berhasil disimpan.`);
+      setEditingOfficerSignature(null);
+    } catch (err) {
+      handleFirestoreError(
+        err,
+        OperationType.UPDATE,
+        `supervision_officers/${editingOfficerSignature.id}`
+      );
+    }
+  };
+
   const filteredRecap = assessments.filter((a) => {
     const q = recapSearch.trim().toLowerCase();
     const matchText =
@@ -917,6 +1259,7 @@ export function SupervisionModule() {
           {[
             { key: 'assessments', label: 'Formulir Penilaian' },
             { key: 'schedules', label: 'Jadwal Supervisi' },
+            { key: 'officers', label: 'Petugas Supervisor' },
             { key: 'instruments', label: 'Master Instrumen' },
             { key: 'recap', label: 'Rekapitulasi & Grafik' },
           ].map((item) => (
@@ -965,6 +1308,13 @@ export function SupervisionModule() {
                       className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-emerald-800 text-white rounded-lg hover:bg-emerald-900"
                     >
                       <Plus className="w-4 h-4" /> Mulai Penilaian Baru
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTab('officers')}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold border border-emerald-800/30 bg-emerald-50 text-emerald-900 rounded-lg hover:bg-emerald-100"
+                    >
+                      <UserPlus className="w-4 h-4" /> Petugas Supervisor ({officers.length})
                     </button>
                     <button
                       type="button"
@@ -1043,24 +1393,122 @@ export function SupervisionModule() {
                     <h2 className="text-xl font-editorial font-semibold text-slate-950">
                       {activeAssessment.instrumentTitle}
                     </h2>
-                    <div className="text-xs text-slate-600 mt-1">
-                      Dinilai: <span className="font-semibold text-slate-900">{activeAssessment.assessedPersonName}</span> ·
-                      Supervisor: <span className="font-semibold text-slate-900">{activeAssessment.supervisorName}</span> ·
-                      Periode: <span className="font-tabular">{activeAssessment.period}</span> ·
-                      Status: <span className="font-semibold text-emerald-900">{activeAssessment.status}</span>
+                    <div className="text-xs text-slate-600 mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                      <span>
+                        Dinilai:{' '}
+                        <span className="font-semibold text-slate-900">
+                          {activeAssessment.assessedPersonName}
+                        </span>{' '}
+                        ·
+                      </span>
+                      <span>
+                        Supervisor:{' '}
+                        <span className="font-semibold text-slate-900">
+                          {editingSupervisorName || activeAssessment.supervisorName}
+                        </span>{' '}
+                        ·
+                      </span>
+                      <span>
+                        Periode: <span className="font-tabular">{activeAssessment.period}</span> ·
+                      </span>
+                      <span>
+                        Status:{' '}
+                        <span className="font-semibold text-emerald-900">{activeAssessment.status}</span>
+                      </span>
                     </div>
+                    {canSupervise && !isLocked && (
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <label className="text-[11px] font-semibold text-slate-600">
+                          Pilih Petugas Supervisor:
+                        </label>
+                        <select
+                          value={
+                            activeOfficers.some((o) => formatOfficerLabel(o) === editingSupervisorName)
+                              ? editingSupervisorName
+                              : ''
+                          }
+                          onChange={(e) => {
+                            if (e.target.value) setEditingSupervisorName(e.target.value);
+                          }}
+                          className="px-2.5 py-1 text-xs border border-slate-300 rounded-lg bg-white text-slate-800 max-w-xs"
+                        >
+                          <option value="">-- Pilih dari daftar petugas tersimpan --</option>
+                          {activeOfficers.map((off) => {
+                            const label = formatOfficerLabel(off);
+                            return (
+                              <option key={off.id} value={label}>
+                                {label}
+                              </option>
+                            );
+                          })}
+                        </select>
+                        <input
+                          type="text"
+                          value={editingSupervisorName}
+                          onChange={(e) => setEditingSupervisorName(e.target.value)}
+                          placeholder="Atau ketik nama supervisor..."
+                          className="px-2.5 py-1 text-xs border border-slate-300 rounded-lg w-56"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowOfficerModal(true)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-emerald-800 border border-emerald-800/30 bg-emerald-50 rounded-lg hover:bg-emerald-100"
+                        >
+                          <UserPlus className="w-3.5 h-3.5" /> Tambah Petugas
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
+                    {(effectiveRole === 'super_admin' ||
+                      effectiveRole === 'kepala_sekolah' ||
+                      (canSupervise && activeAssessment.status !== 'Disetujui')) && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openSignatureModal({
+                            ...activeAssessment,
+                            supervisorName: editingSupervisorName || activeAssessment.supervisorName,
+                          })
+                        }
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-emerald-800/30 bg-emerald-50 text-emerald-900 rounded-lg hover:bg-emerald-100"
+                      >
+                        <PenTool className="w-3.5 h-3.5" />
+                        {activeAssessment.supervisorSignatureUrl ||
+                        findMatchedOfficer(editingSupervisorName || activeAssessment.supervisorName)
+                          ?.signatureDataUrl
+                          ? 'Ubah TTD Supervisor'
+                          : 'Bubuhkan TTD'}
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => exportSupervisionToExcel(activeAssessment, activeIndicators)}
+                      onClick={() =>
+                        exportSupervisionToExcel(
+                          {
+                            ...activeAssessment,
+                            supervisorName: editingSupervisorName || activeAssessment.supervisorName,
+                          },
+                          activeIndicators,
+                          findMatchedOfficer(editingSupervisorName || activeAssessment.supervisorName)
+                        )
+                      }
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg hover:bg-slate-50"
                     >
                       <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" /> Excel
                     </button>
                     <button
                       type="button"
-                      onClick={() => exportSupervisionToPDF(activeAssessment, activeIndicators)}
+                      onClick={() =>
+                        exportSupervisionToPDF(
+                          {
+                            ...activeAssessment,
+                            supervisorName: editingSupervisorName || activeAssessment.supervisorName,
+                          },
+                          activeIndicators,
+                          findMatchedOfficer(editingSupervisorName || activeAssessment.supervisorName)
+                        )
+                      }
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg hover:bg-slate-50"
                     >
                       <FileText className="w-3.5 h-3.5 text-red-700" /> PDF
@@ -1445,16 +1893,25 @@ export function SupervisionModule() {
       {/* TAB 2: JADWAL SUPERVISI */}
       {tab === 'schedules' && (
         <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-5">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-base font-semibold text-slate-950">Jadwal Supervisi GTK & Kepala Sekolah</h2>
             {canSupervise && (
-              <button
-                type="button"
-                onClick={() => setShowScheduleModal(true)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-emerald-800 text-white rounded-lg"
-              >
-                <Plus className="w-4 h-4" /> Buat Jadwal Supervisi
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowOfficerModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold border border-emerald-800/30 bg-emerald-50 text-emerald-900 rounded-lg hover:bg-emerald-100"
+                >
+                  <UserPlus className="w-4 h-4" /> Tambah Petugas Supervisor
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowScheduleModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-emerald-800 text-white rounded-lg"
+                >
+                  <Plus className="w-4 h-4" /> Buat Jadwal Supervisi
+                </button>
+              </div>
             )}
           </div>
           <div className="overflow-x-auto border border-slate-200 rounded-lg">
@@ -1495,6 +1952,236 @@ export function SupervisionModule() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2B: PETUGAS SUPERVISOR (PENGAWAS PEMBINA & TIM PENJAMINAN MUTU) */}
+      {tab === 'officers' && (
+        <div className="space-y-6">
+          <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-5">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-base font-semibold text-slate-950">
+                  Petugas Supervisor (Pengawas Pembina & Tim Penjaminan Mutu)
+                </h2>
+                <p className="text-xs text-slate-600 mt-1">
+                  Tambahkan dan kelola nama petugas supervisor dari unsur Pengawas Pembina, Tim
+                  Penjaminan Mutu, Kepala Sekolah, maupun Tim Supervisor Internal agar dapat dipilih
+                  langsung pada formulir penilaian dan jadwal supervisi.
+                </p>
+              </div>
+              {canSupervise && (
+                <button
+                  type="button"
+                  onClick={() => setShowOfficerModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-emerald-800 text-white rounded-lg hover:bg-emerald-900 shrink-0"
+                >
+                  <UserPlus className="w-4 h-4" /> Tambah Petugas Supervisor
+                </button>
+              )}
+            </div>
+
+            {canSupervise && (
+              <form
+                onSubmit={handleCreateOfficer}
+                className="bg-slate-50 border border-slate-200 rounded-xl p-4 grid grid-cols-1 md:grid-cols-12 gap-3 items-end"
+              >
+                <div className="md:col-span-4">
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Nama Petugas Supervisor
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={140}
+                    placeholder="Contoh: Drs. H. Ahmad Fauzi, M.Pd."
+                    value={officerForm.name}
+                    onChange={(e) => setOfficerForm({ ...officerForm, name: e.target.value })}
+                    className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white"
+                  />
+                </div>
+                <div className="md:col-span-3">
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Unsur / Peran Supervisor
+                  </label>
+                  <select
+                    value={officerForm.unit}
+                    onChange={(e) =>
+                      setOfficerForm({
+                        ...officerForm,
+                        unit: e.target.value as SupervisionOfficerUnit,
+                      })
+                    }
+                    className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white"
+                  >
+                    <option value="Pengawas Pembina & Tim Penjaminan Mutu">
+                      Pengawas Pembina & Tim Penjaminan Mutu
+                    </option>
+                    <option value="Pengawas Pembina">Pengawas Pembina</option>
+                    <option value="Tim Penjaminan Mutu">Tim Penjaminan Mutu</option>
+                    <option value="Kepala Sekolah">Kepala Sekolah</option>
+                    <option value="Tim Supervisor Internal">Tim Supervisor Internal</option>
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    NIP / NUPTK (Opsional)
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={40}
+                    placeholder="NIP / -"
+                    value={officerForm.nip}
+                    onChange={(e) => setOfficerForm({ ...officerForm, nip: e.target.value })}
+                    className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white font-tabular"
+                  />
+                </div>
+                <div className="md:col-span-3 flex gap-2">
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                      Instansi / Unit
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={180}
+                      placeholder="Cabdin / TPMPS Sekolah"
+                      value={officerForm.institution}
+                      onChange={(e) =>
+                        setOfficerForm({ ...officerForm, institution: e.target.value })
+                      }
+                      className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="px-4 py-1.5 text-xs font-semibold bg-emerald-800 text-white rounded-lg hover:bg-emerald-900 h-[34px] shrink-0"
+                  >
+                    Simpan
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div className="overflow-x-auto border border-slate-200 rounded-lg">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                  <tr>
+                    <th className="py-2.5 px-3 font-semibold">Nama Petugas Supervisor</th>
+                    <th className="py-2.5 px-3 font-semibold">Unsur / Kategori</th>
+                    <th className="py-2.5 px-3 font-semibold">NIP / NUPTK</th>
+                    <th className="py-2.5 px-3 font-semibold">Instansi / Lembaga</th>
+                    <th className="py-2.5 px-3 font-semibold">TTD Digital</th>
+                    <th className="py-2.5 px-3 font-semibold">Status</th>
+                    <th className="py-2.5 px-3 font-semibold text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {officers.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-xs text-slate-500">
+                        Belum ada data petugas supervisor. Tambahkan nama petugas Pengawas Pembina
+                        atau Tim Penjaminan Mutu melalui formulir di atas.
+                      </td>
+                    </tr>
+                  ) : (
+                    officers.map((off) => (
+                      <tr key={off.id} className="hover:bg-slate-50">
+                        <td className="py-2.5 px-3 font-medium text-slate-900">{off.name}</td>
+                        <td className="py-2.5 px-3 text-xs text-emerald-900 font-semibold">
+                          {off.unit}
+                        </td>
+                        <td className="py-2.5 px-3 text-xs font-tabular text-slate-600">
+                          {off.nip || '-'}
+                        </td>
+                        <td className="py-2.5 px-3 text-xs text-slate-600">
+                          {off.institution || '-'}
+                        </td>
+                        <td className="py-2.5 px-3 text-xs">
+                          {off.signatureDataUrl ? (
+                            <div className="flex items-center gap-2">
+                              <img
+                                src={off.signatureDataUrl}
+                                alt={`TTD ${off.name}`}
+                                className="h-8 w-20 object-contain border border-slate-200 rounded bg-white p-0.5"
+                              />
+                              {canSupervise && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingOfficerSignature(off);
+                                    setOfficerSigDraft(off.signatureDataUrl || '');
+                                  }}
+                                  className="text-[11px] font-semibold text-emerald-800 hover:underline"
+                                >
+                                  Ubah
+                                </button>
+                              )}
+                            </div>
+                          ) : canSupervise ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingOfficerSignature(off);
+                                setOfficerSigDraft('');
+                              }}
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 hover:text-emerald-800"
+                            >
+                              <PenTool className="w-3 h-3" /> Atur TTD
+                            </button>
+                          ) : (
+                            <span className="text-slate-400">Belum diatur</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-xs">
+                          <span
+                            className={`font-semibold ${
+                              off.isActive ? 'text-emerald-800' : 'text-slate-400'
+                            }`}
+                          >
+                            {off.isActive ? 'Aktif' : 'Nonaktif'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right space-x-2 whitespace-nowrap">
+                          {canSupervise && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setNewAssessmentForm((prev) => ({
+                                    ...prev,
+                                    supervisorName: formatOfficerLabel(off),
+                                  }));
+                                  setShowNewAssessmentModal(true);
+                                }}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-emerald-800 border border-emerald-800/30 bg-emerald-50 rounded-lg hover:bg-emerald-100"
+                              >
+                                <UserCheck className="w-3.5 h-3.5" /> Gunakan
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleOfficerActive(off)}
+                                className="px-2.5 py-1 text-xs font-medium border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-100"
+                              >
+                                {off.isActive ? 'Nonaktifkan' : 'Aktifkan'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteOfficer(off)}
+                                title="Hapus petugas supervisor"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-red-700 border border-red-200 rounded-lg hover:bg-red-50"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" /> Hapus
+                              </button>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -1769,12 +2456,21 @@ export function SupervisionModule() {
                   <th className="py-2.5 px-3 font-semibold text-right">Nilai</th>
                   <th className="py-2.5 px-3 font-semibold">Predikat</th>
                   <th className="py-2.5 px-3 font-semibold">Status</th>
+                  <th className="py-2.5 px-3 font-semibold">TTD Pengawas</th>
                   <th className="py-2.5 px-3 font-semibold text-right">Ekspor</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {filteredRecap.map((a) => {
                   const instInds = getIndicatorsForInstrument(a.instrumentId);
+                  const matchedOfficer = findMatchedOfficer(a.supervisorName);
+                  const hasSignature = Boolean(
+                    a.supervisorSignatureUrl || matchedOfficer?.signatureDataUrl
+                  );
+                  const canSignRow =
+                    effectiveRole === 'super_admin' ||
+                    effectiveRole === 'kepala_sekolah' ||
+                    (canSupervise && a.status !== 'Disetujui');
                   return (
                     <tr key={a.id}>
                       <td className="py-2.5 px-3 font-medium text-slate-900">
@@ -1791,17 +2487,40 @@ export function SupervisionModule() {
                       </td>
                       <td className="py-2.5 px-3 text-xs font-semibold">{a.overallPredicate}</td>
                       <td className="py-2.5 px-3 text-xs font-semibold">{a.status}</td>
+                      <td className="py-2.5 px-3 text-xs whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          {hasSignature ? (
+                            <img
+                              src={a.supervisorSignatureUrl || matchedOfficer?.signatureDataUrl}
+                              alt={`TTD ${a.supervisorName}`}
+                              className="h-7 w-16 object-contain border border-slate-200 rounded bg-white p-0.5"
+                            />
+                          ) : (
+                            <span className="text-[11px] text-slate-400">Ruang TTD</span>
+                          )}
+                          {canSignRow && (
+                            <button
+                              type="button"
+                              onClick={() => openSignatureModal(a)}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-emerald-800 border border-emerald-800/30 bg-emerald-50 rounded hover:bg-emerald-100"
+                            >
+                              <PenTool className="w-3 h-3" />
+                              {hasSignature ? 'Ubah TTD' : 'Bubuhkan TTD'}
+                            </button>
+                          )}
+                        </div>
+                      </td>
                       <td className="py-2.5 px-3 text-right space-x-2 whitespace-nowrap">
                         <button
                           type="button"
-                          onClick={() => exportSupervisionToExcel(a, instInds)}
+                          onClick={() => exportSupervisionToExcel(a, instInds, matchedOfficer)}
                           className="text-xs font-semibold text-emerald-800 hover:underline"
                         >
                           Excel
                         </button>
                         <button
                           type="button"
-                          onClick={() => exportSupervisionToPDF(a, instInds)}
+                          onClick={() => exportSupervisionToPDF(a, instInds, matchedOfficer)}
                           className="text-xs font-semibold text-red-700 hover:underline"
                         >
                           PDF
@@ -1865,13 +2584,52 @@ export function SupervisionModule() {
                 className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg font-tabular"
               />
             </div>
-            <input
-              type="text"
-              placeholder="Nama Supervisor"
-              value={scheduleForm.supervisorName}
-              onChange={(e) => setScheduleForm({ ...scheduleForm, supervisorName: e.target.value })}
-              className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg"
-            />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-medium text-slate-700">
+                  Petugas Supervisor (Pengawas Pembina & Tim Penjaminan Mutu)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowOfficerModal(true)}
+                  className="text-[11px] font-semibold text-emerald-800 hover:underline"
+                >
+                  + Tambah Petugas Baru
+                </button>
+              </div>
+              {activeOfficers.length > 0 && (
+                <select
+                  value={
+                    activeOfficers.some((o) => formatOfficerLabel(o) === scheduleForm.supervisorName)
+                      ? scheduleForm.supervisorName
+                      : ''
+                  }
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setScheduleForm({ ...scheduleForm, supervisorName: e.target.value });
+                    }
+                  }}
+                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white"
+                >
+                  <option value="">-- Pilih dari Daftar Petugas Supervisor --</option>
+                  {activeOfficers.map((off) => {
+                    const label = formatOfficerLabel(off);
+                    return (
+                      <option key={off.id} value={label}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </select>
+              )}
+              <input
+                type="text"
+                placeholder="Atau ketik Nama Supervisor"
+                value={scheduleForm.supervisorName}
+                onChange={(e) => setScheduleForm({ ...scheduleForm, supervisorName: e.target.value })}
+                className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg"
+              />
+            </div>
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setShowScheduleModal(false)} className="px-4 py-2 text-xs border rounded-lg">
                 Batal
@@ -2021,11 +2779,52 @@ export function SupervisionModule() {
                 />
               </div>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">Nama Supervisor / Penilai</label>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-medium text-slate-700">
+                  Nama Petugas Supervisor / Penilai
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowOfficerModal(true)}
+                  className="text-[11px] font-semibold text-emerald-800 hover:underline"
+                >
+                  + Tambah Petugas Baru
+                </button>
+              </div>
+              {activeOfficers.length > 0 && (
+                <select
+                  value={
+                    activeOfficers.some(
+                      (o) => formatOfficerLabel(o) === newAssessmentForm.supervisorName
+                    )
+                      ? newAssessmentForm.supervisorName
+                      : ''
+                  }
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setNewAssessmentForm({
+                        ...newAssessmentForm,
+                        supervisorName: e.target.value,
+                      });
+                    }
+                  }}
+                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white"
+                >
+                  <option value="">-- Pilih dari Daftar Petugas Supervisor --</option>
+                  {activeOfficers.map((off) => {
+                    const label = formatOfficerLabel(off);
+                    return (
+                      <option key={off.id} value={label}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </select>
+              )}
               <input
                 type="text"
-                placeholder={userAccount?.displayName || 'Supervisor'}
+                placeholder={userAccount?.displayName || 'Nama Petugas Supervisor'}
                 value={newAssessmentForm.supervisorName}
                 onChange={(e) =>
                   setNewAssessmentForm({ ...newAssessmentForm, supervisorName: e.target.value })
@@ -2046,6 +2845,274 @@ export function SupervisionModule() {
                 className="px-4 py-2 text-xs font-semibold bg-emerald-800 text-white rounded-lg"
               >
                 Buka Formulir
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Modal Tambah Petugas Supervisor */}
+      {showOfficerModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/50 flex items-center justify-center p-4">
+          <form onSubmit={handleCreateOfficer} className="bg-white rounded-xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-950">
+                Tambah Petugas Supervisor
+              </h3>
+              <button type="button" onClick={() => setShowOfficerModal(false)}>
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-600">
+              Tambahkan nama petugas Pengawas Pembina atau Tim Penjaminan Mutu untuk digunakan pada
+              formulir penilaian & jadwal supervisi.
+            </p>
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">
+                Nama Lengkap & Gelar Petugas Supervisor
+              </label>
+              <input
+                type="text"
+                required
+                maxLength={140}
+                placeholder="Contoh: Drs. H. Ahmad Fauzi, M.Pd."
+                value={officerForm.name}
+                onChange={(e) => setOfficerForm({ ...officerForm, name: e.target.value })}
+                className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">
+                Unsur / Kategori Supervisor
+              </label>
+              <select
+                value={officerForm.unit}
+                onChange={(e) =>
+                  setOfficerForm({
+                    ...officerForm,
+                    unit: e.target.value as SupervisionOfficerUnit,
+                  })
+                }
+                className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white"
+              >
+                <option value="Pengawas Pembina & Tim Penjaminan Mutu">
+                  Pengawas Pembina & Tim Penjaminan Mutu
+                </option>
+                <option value="Pengawas Pembina">Pengawas Pembina</option>
+                <option value="Tim Penjaminan Mutu">Tim Penjaminan Mutu</option>
+                <option value="Kepala Sekolah">Kepala Sekolah</option>
+                <option value="Tim Supervisor Internal">Tim Supervisor Internal</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  NIP / NUPTK (Opsional)
+                </label>
+                <input
+                  type="text"
+                  maxLength={40}
+                  placeholder="NIP / -"
+                  value={officerForm.nip}
+                  onChange={(e) => setOfficerForm({ ...officerForm, nip: e.target.value })}
+                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg font-tabular"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  Instansi / Lembaga
+                </label>
+                <input
+                  type="text"
+                  maxLength={180}
+                  placeholder="Cabdin / TPMPS"
+                  value={officerForm.institution}
+                  onChange={(e) => setOfficerForm({ ...officerForm, institution: e.target.value })}
+                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg"
+                />
+              </div>
+            </div>
+            <SignaturePad
+              value={officerForm.signatureDataUrl}
+              onChange={(dataUrl) => setOfficerForm({ ...officerForm, signatureDataUrl: dataUrl })}
+              label="Tanda Tangan Digital Petugas (Opsional)"
+            />
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowOfficerModal(false)}
+                className="px-4 py-2 text-xs border rounded-lg"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 text-xs font-semibold bg-emerald-800 text-white rounded-lg"
+              >
+                Simpan Petugas
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Modal Bubuhkan Tanda Tangan pada Hasil Supervisi (Ekspor PDF/Excel) */}
+      {signatureTargetAssessment && (
+        <div className="fixed inset-0 z-50 bg-slate-950/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-lg w-full p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-950">
+                Bubuhkan Tanda Tangan Pengawas / Supervisor
+              </h3>
+              <button type="button" onClick={() => setSignatureTargetAssessment(null)}>
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-600">
+              Tanda tangan digital beserta nama pengawas/petugas supervisor dan NIP akan dibubuhkan
+              otomatis pada dokumen ekspor PDF & Excel hasil supervisi{' '}
+              <span className="font-semibold text-slate-900">
+                {signatureTargetAssessment.assessedPersonName}
+              </span>
+              .
+            </p>
+            {activeOfficers.length > 0 && (
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  Pilih dari Petugas Supervisor Tersimpan
+                </label>
+                <select
+                  value={
+                    activeOfficers.some(
+                      (o) => formatOfficerLabel(o) === signatureDraftForm.supervisorName
+                    )
+                      ? signatureDraftForm.supervisorName
+                      : ''
+                  }
+                  onChange={(e) => {
+                    const selected = activeOfficers.find(
+                      (o) => formatOfficerLabel(o) === e.target.value
+                    );
+                    if (selected) {
+                      setSignatureDraftForm((prev) => ({
+                        supervisorName: formatOfficerLabel(selected),
+                        supervisorNip: selected.nip || prev.supervisorNip,
+                        signatureDataUrl: selected.signatureDataUrl || prev.signatureDataUrl,
+                      }));
+                    }
+                  }}
+                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white"
+                >
+                  <option value="">-- Pilih Petugas Supervisor --</option>
+                  {activeOfficers.map((off) => {
+                    const label = formatOfficerLabel(off);
+                    return (
+                      <option key={off.id} value={label}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  Nama Pengawas / Supervisor
+                </label>
+                <input
+                  type="text"
+                  maxLength={140}
+                  value={signatureDraftForm.supervisorName}
+                  onChange={(e) =>
+                    setSignatureDraftForm({ ...signatureDraftForm, supervisorName: e.target.value })
+                  }
+                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  NIP / NUPTK (Opsional)
+                </label>
+                <input
+                  type="text"
+                  maxLength={40}
+                  placeholder="NIP / -"
+                  value={signatureDraftForm.supervisorNip}
+                  onChange={(e) =>
+                    setSignatureDraftForm({ ...signatureDraftForm, supervisorNip: e.target.value })
+                  }
+                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg font-tabular"
+                />
+              </div>
+            </div>
+            <SignaturePad
+              value={signatureDraftForm.signatureDataUrl}
+              onChange={(dataUrl) =>
+                setSignatureDraftForm({ ...signatureDraftForm, signatureDataUrl: dataUrl })
+              }
+            />
+            <div className="flex flex-wrap justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setSignatureTargetAssessment(null)}
+                className="px-4 py-2 text-xs border rounded-lg"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSaveAssessmentSignature(false)}
+                className="px-4 py-2 text-xs font-semibold border border-emerald-800 text-emerald-900 rounded-lg hover:bg-emerald-50"
+              >
+                Simpan TTD
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSaveAssessmentSignature(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-emerald-800 text-white rounded-lg hover:bg-emerald-900"
+              >
+                <FileText className="w-3.5 h-3.5" /> Simpan & Ekspor PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Edit Tanda Tangan Petugas Supervisor */}
+      {editingOfficerSignature && (
+        <div className="fixed inset-0 z-50 bg-slate-950/50 flex items-center justify-center p-4">
+          <form
+            onSubmit={handleSaveOfficerSignature}
+            className="bg-white rounded-xl max-w-md w-full p-6 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-950">
+                Atur Tanda Tangan Petugas Supervisor
+              </h3>
+              <button type="button" onClick={() => setEditingOfficerSignature(null)}>
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+            <div className="text-xs text-slate-600">
+              Petugas:{' '}
+              <span className="font-semibold text-slate-900">{editingOfficerSignature.name}</span> (
+              {editingOfficerSignature.unit})
+            </div>
+            <SignaturePad value={officerSigDraft} onChange={setOfficerSigDraft} />
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setEditingOfficerSignature(null)}
+                className="px-4 py-2 text-xs border rounded-lg"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 text-xs font-semibold bg-emerald-800 text-white rounded-lg"
+              >
+                Simpan Tanda Tangan
               </button>
             </div>
           </form>

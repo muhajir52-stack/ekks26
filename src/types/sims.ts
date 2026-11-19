@@ -354,6 +354,8 @@ export interface SupervisionAssessment {
   assessedPersonRole?: string;
   assessedPersonEmail?: string;
   supervisorName: string;
+  supervisorNip?: string;
+  supervisorSignatureUrl?: string;
   academicYearName: string;
   period: string;
   itemScores?: Record<string, SupervisionItemScore>;
@@ -368,6 +370,26 @@ export interface SupervisionAssessment {
   followUpDeadline?: string;
   status: 'Draft' | 'Selesai' | 'Disetujui';
   approvedByName?: string;
+  authorUid: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export type SupervisionOfficerUnit =
+  | 'Pengawas Pembina'
+  | 'Tim Penjaminan Mutu'
+  | 'Pengawas Pembina & Tim Penjaminan Mutu'
+  | 'Kepala Sekolah'
+  | 'Tim Supervisor Internal';
+
+export interface SupervisionOfficer {
+  id: string;
+  name: string;
+  unit: SupervisionOfficerUnit;
+  nip?: string;
+  institution?: string;
+  signatureDataUrl?: string;
+  isActive: boolean;
   authorUid: string;
   createdAt?: unknown;
   updatedAt?: unknown;

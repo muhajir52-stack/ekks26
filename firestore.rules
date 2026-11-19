@@ -402,7 +402,7 @@ service cloud.firestore {
 
     function isValidSupervisionAssessment(data) {
       return data.keys().hasAll(['instrumentId', 'instrumentTitle', 'schoolName', 'assessedPersonName', 'supervisorName', 'academicYearName', 'period', 'overallScore', 'overallMaxScore', 'overallPercentage', 'overallPredicate', 'unfilledCount', 'status', 'authorUid', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['scheduleId', 'instrumentId', 'instrumentTitle', 'schoolName', 'assessedPersonName', 'assessedPersonRole', 'assessedPersonEmail', 'supervisorName', 'academicYearName', 'period', 'itemScores', 'sheetNotes', 'overallScore', 'overallMaxScore', 'overallPercentage', 'overallPredicate', 'unfilledCount', 'recommendations', 'followUpPlan', 'followUpDeadline', 'status', 'approvedByName', 'authorUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['scheduleId', 'instrumentId', 'instrumentTitle', 'schoolName', 'assessedPersonName', 'assessedPersonRole', 'assessedPersonEmail', 'supervisorName', 'supervisorNip', 'supervisorSignatureUrl', 'academicYearName', 'period', 'itemScores', 'sheetNotes', 'overallScore', 'overallMaxScore', 'overallPercentage', 'overallPredicate', 'unfilledCount', 'recommendations', 'followUpPlan', 'followUpDeadline', 'status', 'approvedByName', 'authorUid', 'createdAt', 'updatedAt'])
         && (!data.keys().hasAny(['scheduleId']) || isBoundedString(data.scheduleId, 0, 128))
         && isBoundedString(data.instrumentId, 1, 128)
         && isBoundedString(data.instrumentTitle, 1, 200)
@@ -411,6 +411,8 @@ service cloud.firestore {
         && (!data.keys().hasAny(['assessedPersonRole']) || isBoundedString(data.assessedPersonRole, 0, 60))
         && (!data.keys().hasAny(['assessedPersonEmail']) || isBoundedString(data.assessedPersonEmail, 0, 180))
         && isBoundedString(data.supervisorName, 1, 140)
+        && (!data.keys().hasAny(['supervisorNip']) || isBoundedString(data.supervisorNip, 0, 40))
+        && (!data.keys().hasAny(['supervisorSignatureUrl']) || isBoundedString(data.supervisorSignatureUrl, 0, 200000))
         && isBoundedString(data.academicYearName, 4, 30)
         && isBoundedString(data.period, 1, 60)
         && (!data.keys().hasAny(['itemScores']) || data.itemScores is map)
@@ -425,6 +427,20 @@ service cloud.firestore {
         && (!data.keys().hasAny(['followUpDeadline']) || isBoundedString(data.followUpDeadline, 0, 20))
         && data.status in ['Draft', 'Selesai', 'Disetujui']
         && (!data.keys().hasAny(['approvedByName']) || isBoundedString(data.approvedByName, 0, 140))
+        && isValidId(data.authorUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSupervisionOfficer(data) {
+      return data.keys().hasAll(['name', 'unit', 'isActive', 'authorUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['name', 'unit', 'nip', 'institution', 'signatureDataUrl', 'isActive', 'authorUid', 'createdAt', 'updatedAt'])
+        && isBoundedString(data.name, 1, 140)
+        && data.unit in ['Pengawas Pembina', 'Tim Penjaminan Mutu', 'Pengawas Pembina & Tim Penjaminan Mutu', 'Kepala Sekolah', 'Tim Supervisor Internal']
+        && (!data.keys().hasAny(['nip']) || isBoundedString(data.nip, 0, 40))
+        && (!data.keys().hasAny(['institution']) || isBoundedString(data.institution, 0, 180))
+        && (!data.keys().hasAny(['signatureDataUrl']) || isBoundedString(data.signatureDataUrl, 0, 200000))
+        && data.isActive is bool
         && isValidId(data.authorUid)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
@@ -710,10 +726,21 @@ service cloud.firestore {
         && incoming().authorUid == existing().authorUid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
         && (
           isAdmin()
-          || (isPrincipal() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'approvedByName', 'recommendations', 'followUpPlan', 'followUpDeadline', 'updatedAt']))
-          || (isSupervisor() && existing().status != 'Disetujui' && incoming().status != 'Disetujui' && incoming().diff(existing()).affectedKeys().hasOnly(['itemScores', 'sheetNotes', 'overallScore', 'overallMaxScore', 'overallPercentage', 'overallPredicate', 'unfilledCount', 'recommendations', 'followUpPlan', 'followUpDeadline', 'status', 'updatedAt']))
+          || (isPrincipal() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'approvedByName', 'supervisorName', 'supervisorNip', 'supervisorSignatureUrl', 'recommendations', 'followUpPlan', 'followUpDeadline', 'updatedAt']))
+          || (isSupervisor() && existing().status != 'Disetujui' && incoming().status != 'Disetujui' && incoming().diff(existing()).affectedKeys().hasOnly(['supervisorName', 'supervisorNip', 'supervisorSignatureUrl', 'itemScores', 'sheetNotes', 'overallScore', 'overallMaxScore', 'overallPercentage', 'overallPredicate', 'unfilledCount', 'recommendations', 'followUpPlan', 'followUpDeadline', 'status', 'updatedAt']))
         );
       allow delete: if isAdmin() && isValidId(assessmentId);
+    }
+
+    match /supervision_officers/{officerId} {
+      allow get: if isValidId(officerId) && isSchoolEducator();
+      allow list: if isSchoolEducator();
+      allow create: if isSupervisor() && isValidId(officerId) && isValidSupervisionOfficer(incoming())
+        && incoming().authorUid == request.auth.uid && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isSupervisor() && isValidId(officerId) && isValidSupervisionOfficer(incoming())
+        && incoming().authorUid == existing().authorUid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'unit', 'nip', 'institution', 'signatureDataUrl', 'isActive', 'updatedAt']);
+      allow delete: if isSupervisor() && isValidId(officerId);
     }
 
     // Audit Activity Logs (Append-only)

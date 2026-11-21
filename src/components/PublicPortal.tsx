@@ -16,6 +16,7 @@ import {
 import { db } from '../lib/firebase';
 import { QUICK_ACCOUNTS } from '../context/AuthContext';
 import { loadQuickData, loadQuickRecord, QUICK_KEYS } from '../lib/quickLocalStore';
+import { isAppsScriptEnvironment } from '../lib/gasBridge';
 import {
   DEFAULT_ACHIEVEMENTS,
   DEFAULT_ANNOUNCEMENTS,
@@ -84,29 +85,40 @@ export function PublicPortal({ onOpenPortal, onQuickLogin, isAuthenticated }: Pu
   const [inquiryForm, setInquiryForm] = useState({ name: '', contact: '', topic: 'Informasi PPDB', message: '' });
 
   useEffect(() => {
-    const localContent = loadQuickRecord<Record<string, Omit<SchoolContent, 'id' | 'updatedByUid'>>>(
-      QUICK_KEYS.SCHOOL_CONTENT,
-      {}
-    );
-    if (Object.keys(localContent).length > 0) {
-      setContents((prev) => ({ ...prev, ...localContent }));
-    }
-    const localNews = loadQuickData<NewsArticle>(QUICK_KEYS.NEWS, []);
-    if (localNews.length > 0) setNews(localNews.filter((n) => n.isPublished));
-    const localAnn = loadQuickData<Announcement>(QUICK_KEYS.ANNOUNCEMENTS, []);
-    if (localAnn.length > 0) {
-      setAnnouncements(
-        localAnn.filter((a) => a.audience === 'publik' || a.audience === 'semua')
+    const loadFromLocal = () => {
+      const localContent = loadQuickRecord<Record<string, Omit<SchoolContent, 'id' | 'updatedByUid'>>>(
+        QUICK_KEYS.SCHOOL_CONTENT,
+        {}
       );
+      if (Object.keys(localContent).length > 0) {
+        setContents((prev) => ({ ...prev, ...localContent }));
+      }
+      const localNews = loadQuickData<NewsArticle>(QUICK_KEYS.NEWS, []);
+      if (localNews.length > 0) setNews(localNews.filter((n) => n.isPublished));
+      const localAnn = loadQuickData<Announcement>(QUICK_KEYS.ANNOUNCEMENTS, []);
+      if (localAnn.length > 0) {
+        setAnnouncements(
+          localAnn.filter((a) => a.audience === 'publik' || a.audience === 'semua')
+        );
+      }
+      const localEvents = loadQuickData<AcademicEvent>(QUICK_KEYS.EVENTS, []);
+      if (localEvents.length > 0) setEvents(localEvents);
+      const localAch = loadQuickData<Achievement>(QUICK_KEYS.ACHIEVEMENTS, []);
+      if (localAch.length > 0) setAchievements(localAch);
+      const localGal = loadQuickData<GalleryItem>(QUICK_KEYS.GALLERY, []);
+      if (localGal.length > 0) setGallery(localGal);
+      const localDir = loadQuickData<PublicDirectoryEntry>(QUICK_KEYS.DIRECTORY, []);
+      if (localDir.length > 0) setDirectory(localDir);
+    };
+
+    loadFromLocal();
+
+    if (isAppsScriptEnvironment()) {
+      window.addEventListener('sims:gas-hydrated', loadFromLocal);
+      return () => {
+        window.removeEventListener('sims:gas-hydrated', loadFromLocal);
+      };
     }
-    const localEvents = loadQuickData<AcademicEvent>(QUICK_KEYS.EVENTS, []);
-    if (localEvents.length > 0) setEvents(localEvents);
-    const localAch = loadQuickData<Achievement>(QUICK_KEYS.ACHIEVEMENTS, []);
-    if (localAch.length > 0) setAchievements(localAch);
-    const localGal = loadQuickData<GalleryItem>(QUICK_KEYS.GALLERY, []);
-    if (localGal.length > 0) setGallery(localGal);
-    const localDir = loadQuickData<PublicDirectoryEntry>(QUICK_KEYS.DIRECTORY, []);
-    if (localDir.length > 0) setDirectory(localDir);
 
     const unsubs: Array<() => void> = [];
 

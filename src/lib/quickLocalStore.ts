@@ -13,6 +13,7 @@ import {
   TENDIK_SUPERVISION_INDICATORS,
   TENDIK_SUPERVISION_INSTRUMENT,
 } from './supervisionMasterData';
+import { syncCollectionToAppsScript } from './gasBridge';
 
 export const QUICK_KEYS = {
   STUDENTS: 'sims_quick_students',
@@ -62,6 +63,7 @@ export function saveQuickData<T>(key: string, items: T[]): void {
   } catch {
     // Ignore storage quota errors gracefully
   }
+  syncCollectionToAppsScript(key, items);
 }
 
 export function loadQuickRecord<T>(key: string, fallback: T): T {
@@ -86,6 +88,7 @@ export function saveQuickRecord<T>(key: string, data: T): void {
   } catch {
     // Ignore storage quota errors gracefully
   }
+  syncCollectionToAppsScript(key, data);
 }
 
 export function nextQuickId(prefix: string): string {

@@ -14,6 +14,7 @@ import {
   Calendar,
   CheckCircle2,
   Clock,
+  Copy,
   Database,
   Download,
   FileJson,
@@ -73,6 +74,7 @@ import {
   type DailyBackupHistoryEntry,
   type FullSystemBackupPayload,
 } from '../lib/backupUtils';
+import { getGasSpreadsheetUrl, isAppsScriptEnvironment } from '../lib/gasBridge';
 import type {
   AcademicEvent,
   Achievement,
@@ -1360,6 +1362,44 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
     }
   };
 
+  const handleDownloadAppsScriptAsset = async (fileName: 'Code.gs' | 'index.html') => {
+    try {
+      const res = await fetch(`/appsscript/${fileName}`);
+      if (!res.ok) throw new Error(`Berkas ${fileName} tidak ditemukan.`);
+      const text = await res.text();
+      const mimeType =
+        fileName === 'index.html' ? 'text/html;charset=utf-8' : 'text/plain;charset=utf-8';
+      const blob = new Blob([text], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showToast(`Berkas "${fileName}" (${formatBytes(blob.size)}) berhasil diunduh.`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : `Gagal mengunduh ${fileName}.`);
+    }
+  };
+
+  const handleCopyAppsScriptAsset = async (fileName: 'Code.gs' | 'index.html') => {
+    try {
+      const res = await fetch(`/appsscript/${fileName}`);
+      if (!res.ok) throw new Error(`Berkas ${fileName} tidak ditemukan.`);
+      const text = await res.text();
+      await navigator.clipboard.writeText(text);
+      showToast(`Seluruh isi "${fileName}" (${formatBytes(text.length)}) disalin ke clipboard.`);
+    } catch (err) {
+      showToast(
+        err instanceof Error
+          ? err.message
+          : `Gagal menyalin ${fileName}. Gunakan tombol Unduh ${fileName}.`
+      );
+    }
+  };
+
   const handleExportLogsExcel = () => {
     const rows = filteredLogs.map((l) => ({
       Aktor: l.actorName,
@@ -1733,6 +1773,103 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
                     </tbody>
                   </table>
                 </div>
+              </div>
+
+              {/* Kartu Ekspor Paket Google Apps Script (Code.gs & index.html) */}
+              <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Database className="w-5 h-5 text-emerald-800" />
+                      <h3 className="text-base font-editorial font-semibold text-slate-950">
+                        Paket Konversi Google Apps Script (Code.gs &amp; index.html)
+                      </h3>
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed max-w-2xl">
+                      Unduh kedua berkas hasil konversi untuk di-deploy sebagai Web App di{' '}
+                      <span className="font-mono text-slate-800">script.google.com</span> dengan
+                      penyimpanan otomatis ke Google Spreadsheet &amp; Google Drive sekolah.
+                    </p>
+                  </div>
+
+                  {!isAppsScriptEnvironment() ? (
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadAppsScriptAsset('Code.gs')}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border border-emerald-700 text-emerald-900 bg-emerald-50 rounded-lg hover:bg-emerald-100"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Unduh Code.gs
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyAppsScriptAsset('Code.gs')}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border border-slate-300 text-slate-800 bg-white rounded-lg hover:bg-slate-50"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        Salin Code.gs
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadAppsScriptAsset('index.html')}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-emerald-800 text-white rounded-lg hover:bg-emerald-900"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Unduh index.html
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyAppsScriptAsset('index.html')}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border border-slate-300 text-slate-800 bg-white rounded-lg hover:bg-slate-50"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        Salin index.html
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3.5 py-2">
+                      Aplikasi sedang berjalan di Google Apps Script
+                      {getGasSpreadsheetUrl() ? (
+                        <div className="font-mono text-[11px] font-normal text-slate-600 mt-0.5 break-all">
+                          {getGasSpreadsheetUrl()}
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+
+                <ol className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs text-slate-700">
+                  <li className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1">
+                    <div className="font-semibold text-slate-900">1. Buat Proyek Apps Script</div>
+                    <p className="text-slate-600 leading-relaxed">
+                      Buka script.google.com (atau Google Sheets → Ekstensi → Apps Script) dan buat
+                      proyek baru.
+                    </p>
+                  </li>
+                  <li className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1">
+                    <div className="font-semibold text-slate-900">2. Salin Code.gs</div>
+                    <p className="text-slate-600 leading-relaxed">
+                      Tempelkan isi file <span className="font-mono">Code.gs</span> ke editor
+                      server Apps Script untuk backend Google Sheets.
+                    </p>
+                  </li>
+                  <li className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1">
+                    <div className="font-semibold text-slate-900">3. Buat File index.html</div>
+                    <p className="text-slate-600 leading-relaxed">
+                      Tambah file HTML bernama <span className="font-mono">index</span> lalu tempel
+                      isi <span className="font-mono">index.html</span> (bundel tunggal lengkap).
+                    </p>
+                  </li>
+                  <li className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1">
+                    <div className="font-semibold text-slate-900">4. Deploy Web App</div>
+                    <p className="text-slate-600 leading-relaxed">
+                      Klik Deploy → New deployment → Web app, jalankan fungsi{' '}
+                      <span className="font-mono">setupSimsDatabase</span> sekali untuk menyiapkan
+                      tab Sheet.
+                    </p>
+                  </li>
+                </ol>
               </div>
             </div>
           );

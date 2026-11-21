@@ -26,6 +26,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { db } from './lib/firebase';
 import { isRenderableImageUrl, parseSiteVisuals } from './lib/imageUtils';
 import { loadQuickRecord, QUICK_KEYS } from './lib/quickLocalStore';
+import { getGasSpreadsheetUrl, isAppsScriptEnvironment } from './lib/gasBridge';
 import { PublicPortal } from './components/PublicPortal';
 import { DashboardHome } from './components/DashboardHome';
 import { ParentPortalView } from './components/ParentPortalView';
@@ -127,10 +128,19 @@ function SimsShell() {
   );
 
   useEffect(() => {
-    const localContent = loadQuickRecord<Record<string, SchoolContent>>(QUICK_KEYS.SCHOOL_CONTENT, {});
-    if (localContent.site_visuals) {
-      setSchoolLogoUrl(parseSiteVisuals(localContent.site_visuals).logo_sekolah.url);
+    const syncLogoFromLocal = () => {
+      const localContent = loadQuickRecord<Record<string, SchoolContent>>(QUICK_KEYS.SCHOOL_CONTENT, {});
+      if (localContent.site_visuals) {
+        setSchoolLogoUrl(parseSiteVisuals(localContent.site_visuals).logo_sekolah.url);
+      }
+    };
+    syncLogoFromLocal();
+
+    if (isAppsScriptEnvironment()) {
+      window.addEventListener('sims:gas-hydrated', syncLogoFromLocal);
+      return () => window.removeEventListener('sims:gas-hydrated', syncLogoFromLocal);
     }
+
     const unsub = onSnapshot(
       doc(db, 'school_content', 'site_visuals'),
       (snap) => {
@@ -253,25 +263,27 @@ function SimsShell() {
             </div>
           </div>
 
-          {/* Google Sign-In Alternatif */}
-          <div className="border-t border-slate-200 pt-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="text-xs text-slate-500 space-y-0.5">
-              <div className="font-semibold text-slate-700">
-                Autentikasi Cloud Google & 7 Peran RBAC
+          {/* Google Sign-In Alternatif (hanya pada mode web eksternal) */}
+          {!isAppsScriptEnvironment() && (
+            <div className="border-t border-slate-200 pt-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="text-xs text-slate-500 space-y-0.5">
+                <div className="font-semibold text-slate-700">
+                  Autentikasi Cloud Google & 7 Peran RBAC
+                </div>
+                <div>
+                  Gunakan tombol di samping apabila domain aplikasi telah terdaftar pada Firebase Authentication.
+                </div>
               </div>
-              <div>
-                Gunakan tombol di samping apabila domain aplikasi telah terdaftar pada Firebase Authentication.
-              </div>
+              <button
+                type="button"
+                onClick={signInWithGoogle}
+                disabled={signingIn}
+                className="px-5 py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-semibold rounded-xl transition-colors disabled:opacity-60 whitespace-nowrap shrink-0"
+              >
+                {signingIn ? 'Menghubungkan Akun Google...' : 'Masuk dengan Akun Google'}
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={signInWithGoogle}
-              disabled={signingIn}
-              className="px-5 py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-semibold rounded-xl transition-colors disabled:opacity-60 whitespace-nowrap shrink-0"
-            >
-              {signingIn ? 'Menghubungkan Akun Google...' : 'Masuk dengan Akun Google'}
-            </button>
-          </div>
+          )}
         </div>
       </div>
     );
@@ -443,7 +455,7 @@ function SimsShell() {
           </div>
 
           <div className="flex items-center gap-2.5 shrink-0">
-            {isQuickSession && (
+            {isQuickSession && !isAppsScriptEnvironment() && (
               <button
                 type="button"
                 onClick={signInWithGoogle}
@@ -485,8 +497,19 @@ function SimsShell() {
         {isQuickSession && (
           <div className="bg-amber-50 border-b border-amber-200 px-4 sm:px-6 py-2 text-xs text-amber-950 flex flex-wrap items-center justify-between gap-2">
             <span>
-              Anda sedang masuk melalui <strong>Akun Langsung ({ROLE_LABELS[effectiveRole]})</strong>.
-              Seluruh perubahan data di sesi ini tersimpan secara lokal di peramban Anda.
+              {isAppsScriptEnvironment() ? (
+                <>
+                  Mode <strong>Google Apps Script ({ROLE_LABELS[effectiveRole]})</strong> · Seluruh
+                  perubahan data otomatis tersinkronisasi ke Google Spreadsheet (Code.gs).
+                  {getGasSpreadsheetUrl() ? ` Database: ${getGasSpreadsheetUrl()}` : ''}
+                </>
+              ) : (
+                <>
+                  Anda sedang masuk melalui{' '}
+                  <strong>Akun Langsung ({ROLE_LABELS[effectiveRole]})</strong>. Seluruh perubahan
+                  data di sesi ini tersimpan secara lokal di peramban Anda.
+                </>
+              )}
             </span>
             {authError && <span className="text-red-700 font-medium">{authError}</span>}
           </div>

@@ -19,6 +19,7 @@ import type { UserAccount, UserRole } from '../types/sims';
 import { ROLE_LABELS } from '../types/sims';
 import { logActivity } from '../lib/audit';
 import { appendQuickActivityLog } from '../lib/quickLocalStore';
+import { hydrateFromAppsScript, isAppsScriptEnvironment } from '../lib/gasBridge';
 
 const BOOTSTRAPPED_ADMIN_EMAIL = 'muhajir52@guru.sma.belajar.id';
 const QUICK_SESSION_STORAGE_KEY = 'sims_quick_account_id';
@@ -119,6 +120,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let unsubUserDoc: (() => void) | null = null;
+    let cancelled = false;
+
+    if (isAppsScriptEnvironment()) {
+      hydrateFromAppsScript().finally(() => {
+        if (!cancelled) {
+          setAuthReady(true);
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
 
     getRedirectResult(auth)
       .then(async (result) => {

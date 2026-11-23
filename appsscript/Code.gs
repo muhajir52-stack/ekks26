@@ -3,8 +3,10 @@
  * SIMS SMA DARUL ULUM KEPOHBARU — GOOGLE APPS SCRIPT BACKEND (Code.gs)
  * Lokasi: Kepohbaru, Bojonegoro, Jawa Timur
  * Deskripsi: Server Web App & Sinkronisasi Database Google Sheets untuk
- *            seluruh modul SIMS (Akademik, Absensi, Arsip Digital, Supervisi
- *            Digital 88 Butir & TTD Pengawas, CMS Web Profil, Grafik D3.js).
+ *            3 modul utama SIMS:
+ *            1. Arsip Digital Sekolah
+ *            2. Supervisi Digital (88 Butir, Petugas Supervisor & TTD Pengawas)
+ *            3. CMS Web Profil Sekolah
  * ============================================================================
  */
 
@@ -12,14 +14,6 @@ var SIMS_SPREADSHEET_PROP_KEY = 'SIMS_SPREADSHEET_ID';
 var SIMS_CHUNK_LIMIT = 45000; // Batas aman karakter per sel Google Sheets (maks 50.000)
 
 var SIMS_COLLECTION_SHEETS = {
-  sims_quick_students: 'students',
-  sims_quick_teachers: 'teachers',
-  sims_quick_classes: 'classes',
-  sims_quick_subjects: 'subjects',
-  sims_quick_academic_years: 'academic_years',
-  sims_quick_grades: 'grades',
-  sims_quick_attendance: 'attendance',
-  sims_quick_attendance_notifications: 'attendance_notifications',
   sims_quick_archive_folders: 'archive_folders',
   sims_quick_digital_archives: 'digital_archives',
   sims_quick_supervision_instruments: 'supervision_instruments',
@@ -27,7 +21,6 @@ var SIMS_COLLECTION_SHEETS = {
   sims_quick_supervision_schedules: 'supervision_schedules',
   sims_quick_supervision_assessments: 'supervision_assessments',
   sims_quick_supervision_officers: 'supervision_officers',
-  sims_quick_activity_logs: 'activity_logs',
   sims_quick_school_content: 'school_content',
   sims_quick_news: 'news',
   sims_quick_announcements: 'announcements',
@@ -35,15 +28,21 @@ var SIMS_COLLECTION_SHEETS = {
   sims_quick_achievements: 'achievements',
   sims_quick_gallery_items: 'gallery_items',
   sims_quick_public_directory: 'public_directory',
-  sims_quick_users: 'users',
-  sims_daily_backup_history: 'backup_history'
+  sims_quick_activity_logs: 'activity_logs'
 };
 
 /**
  * Entry point Web App Google Apps Script.
+ * Mendukung nama file HTML "Index.html" maupun "index.html".
  */
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('index')
+  var output;
+  try {
+    output = HtmlService.createHtmlOutputFromFile('Index');
+  } catch (e) {
+    output = HtmlService.createHtmlOutputFromFile('index');
+  }
+  return output
     .setTitle('SIMS SMA Darul Ulum Kepohbaru — Sistem Informasi Manajemen Sekolah')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);

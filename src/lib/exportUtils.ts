@@ -319,36 +319,3 @@ export function exportSupervisionToPDF(
     `Laporan_Supervisi_${assessment.assessedPersonName.replace(/\s+/g, '_')}.pdf`
   );
 }
-
-export async function parseStudentsFromExcel(file: File): Promise<
-  Array<{
-    nis: string;
-    nisn: string;
-    name: string;
-    gender: 'L' | 'P';
-    className: string;
-    parentName: string;
-    parentEmail: string;
-    previousSchool: string;
-  }>
-> {
-  const buffer = await file.arrayBuffer();
-  const wb = XLSX.read(buffer, { type: 'array' });
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
-  return json
-    .map((row) => {
-      const genderRaw = String(row['L/P'] || row['Jenis Kelamin'] || 'L').toUpperCase();
-      return {
-        nis: String(row['NIS'] || '').trim(),
-        nisn: String(row['NISN'] || '').trim(),
-        name: String(row['Nama Lengkap'] || row['Nama'] || '').trim(),
-        gender: (genderRaw.startsWith('P') ? 'P' : 'L') as 'L' | 'P',
-        className: String(row['Kelas'] || 'X-A').trim(),
-        parentName: String(row['Nama Orang Tua'] || row['Orang Tua'] || 'Wali Siswa').trim(),
-        parentEmail: String(row['Email Orang Tua'] || '').trim(),
-        previousSchool: String(row['Asal Sekolah'] || '').trim(),
-      };
-    })
-    .filter((item) => item.name.length > 0 && item.nis.length > 0);
-}

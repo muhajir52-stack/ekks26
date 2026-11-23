@@ -99,6 +99,9 @@ function createAppsScriptSlimPlugin() {
         if (typeof window.jspdfAutoTable === 'function') {
           return window.jspdfAutoTable(doc, options);
         }
+        if (window.jspdf && typeof window.jspdf.autoTable === 'function') {
+          return window.jspdf.autoTable(doc, options);
+        }
       }
     `,
   };
@@ -241,7 +244,9 @@ ${safeJs}
 `;
 
   fs.mkdirSync(appsScriptDir, { recursive: true });
+  const targetIndexCapPath = path.resolve(appsScriptDir, 'Index.html');
   const targetHtmlPath = path.resolve(appsScriptDir, 'index.html');
+  fs.writeFileSync(targetIndexCapPath, outputHtml, 'utf8');
   fs.writeFileSync(targetHtmlPath, outputHtml, 'utf8');
 
   fs.mkdirSync(publicAppsScriptDir, { recursive: true });
@@ -249,10 +254,11 @@ ${safeJs}
   if (fs.existsSync(codeGsPath)) {
     fs.copyFileSync(codeGsPath, path.resolve(publicAppsScriptDir, 'Code.gs'));
   }
+  fs.copyFileSync(targetIndexCapPath, path.resolve(publicAppsScriptDir, 'Index.html'));
   fs.copyFileSync(targetHtmlPath, path.resolve(publicAppsScriptDir, 'index.html'));
 
-  const sizeKb = (fs.statSync(targetHtmlPath).size / 1024).toFixed(1);
-  console.log(`Selesai! appsscript/index.html ringkas berhasil dibuat (${sizeKb} KB).`);
+  const sizeKb = (fs.statSync(targetIndexCapPath).size / 1024).toFixed(1);
+  console.log(`Selesai! appsscript/Index.html & appsscript/index.html berhasil dibuat (${sizeKb} KB).`);
 }
 
 main().catch((err) => {

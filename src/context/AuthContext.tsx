@@ -43,7 +43,7 @@ export const QUICK_ACCOUNTS: QuickAccountOption[] = [
     role: 'super_admin',
     unitLabel: 'Super Administrator · SMA Darul Ulum Kepohbaru',
     accessSummary:
-      'Akses penuh seluruh modul SIMS, Manajemen Siswa, Arsip Digital, Supervisi 88 Butir, CMS Web & Kelola Gambar',
+      'Akses penuh 3 menu utama: Arsip Digital Sekolah, Supervisi Digital Terintegrasi, dan CMS Web Profil',
   },
 ];
 

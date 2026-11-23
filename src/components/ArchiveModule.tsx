@@ -4,7 +4,6 @@ import {
   collection,
   deleteDoc,
   doc,
-  getDocs,
   onSnapshot,
   serverTimestamp,
   updateDoc,
@@ -12,7 +11,6 @@ import {
 import {
   Download,
   Eye,
-  FileArchive,
   Folder,
   FolderPlus,
   History,
@@ -484,67 +482,6 @@ export function ArchiveModule() {
     }
   };
 
-  const handleExportBackup = async () => {
-    if (isQuickSession) {
-      const backupPayload: Record<string, unknown> = {
-        archive_folders: folders,
-        digital_archives: archives,
-        exportedAt: new Date().toISOString(),
-        mode: 'quick_session_local',
-      };
-      const blob = new Blob([JSON.stringify(backupPayload, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `Backup_SIMS_SMA_DU_${new Date().toISOString().slice(0, 10)}.json`;
-      link.click();
-      URL.revokeObjectURL(url);
-      appendQuickActivityLog({
-        actorUid: userAccount?.uid,
-        actorName: userAccount?.displayName || 'Admin',
-        actorRole: effectiveRole,
-        action: 'Backup Database JSON',
-        module: 'Arsip & Keamanan',
-        details: 'Mengunduh paket cadangan data arsip lokal.',
-      });
-      setFeedback('Cadangan data arsip lokal (JSON Backup) berhasil diunduh.');
-      return;
-    }
-
-    const collectionsToBackup = [
-      'students',
-      'teachers',
-      'classes',
-      'subjects',
-      'grades',
-      'attendance',
-      'archive_folders',
-      'digital_archives',
-      'supervision_instruments',
-      'supervision_assessments',
-    ];
-    const backupPayload: Record<string, unknown[]> = {};
-    for (const colName of collectionsToBackup) {
-      const snap = await getDocs(collection(db, colName));
-      backupPayload[colName] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    }
-    const blob = new Blob([JSON.stringify(backupPayload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `Backup_SIMS_SMA_DU_${new Date().toISOString().slice(0, 10)}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-    await logActivity({
-      actorName: userAccount?.displayName || 'Admin',
-      actorRole: effectiveRole,
-      action: 'Backup Database JSON',
-      module: 'Arsip & Keamanan',
-      details: 'Mengunduh paket cadangan data sistem terstruktur.',
-    });
-    setFeedback('Cadangan data sistem (JSON Backup) berhasil diunduh.');
-  };
-
   const toggleRolePermission = (role: UserRole) => {
     setFolderForm((prev) => ({
       ...prev,
@@ -567,15 +504,6 @@ export function ArchiveModule() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {effectiveRole === 'super_admin' && (
-            <button
-              type="button"
-              onClick={handleExportBackup}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border border-slate-300 bg-white rounded-lg hover:bg-slate-50"
-            >
-              <FileArchive className="w-4 h-4 text-emerald-800" /> Backup Sistem (JSON)
-            </button>
-          )}
           {canManageArchives && (
             <>
               <button

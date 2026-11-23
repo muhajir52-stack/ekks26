@@ -8,17 +8,11 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import {
   Archive,
   ArrowLeft,
-  CalendarCheck,
   ClipboardCheck,
   Globe,
-  GraduationCap,
-  Image,
   KeyRound,
-  LayoutDashboard,
   LogOut,
   Menu,
-  Shield,
-  Users,
   X,
 } from 'lucide-react';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -28,10 +22,6 @@ import { isRenderableImageUrl, parseSiteVisuals } from './lib/imageUtils';
 import { loadQuickRecord, QUICK_KEYS } from './lib/quickLocalStore';
 import { getGasSpreadsheetUrl, isAppsScriptEnvironment } from './lib/gasBridge';
 import { PublicPortal } from './components/PublicPortal';
-import { DashboardHome } from './components/DashboardHome';
-import { ParentPortalView } from './components/ParentPortalView';
-import { AcademicModule } from './components/AcademicModule';
-import { AttendanceModule } from './components/AttendanceModule';
 import { ArchiveModule } from './components/ArchiveModule';
 import { SupervisionModule } from './components/SupervisionModule';
 import { CmsAdminModule } from './components/CmsAdminModule';
@@ -46,32 +36,8 @@ interface NavConfig {
 
 const NAV_ITEMS: NavConfig[] = [
   {
-    id: 'overview',
-    label: 'Ringkasan Utama',
-    icon: LayoutDashboard,
-    roles: ['super_admin', 'kepala_sekolah', 'guru', 'tendik', 'supervisor', 'wali_kelas'],
-  },
-  {
-    id: 'parent_portal',
-    label: 'Portal Orang Tua',
-    icon: Users,
-    roles: ['orang_tua'],
-  },
-  {
-    id: 'academic',
-    label: 'Akademik & Siswa',
-    icon: GraduationCap,
-    roles: ['super_admin', 'kepala_sekolah', 'guru', 'tendik', 'wali_kelas'],
-  },
-  {
-    id: 'attendance',
-    label: 'Absensi & Notifikasi',
-    icon: CalendarCheck,
-    roles: ['super_admin', 'kepala_sekolah', 'guru', 'wali_kelas'],
-  },
-  {
     id: 'archives',
-    label: 'Arsip Digital Sekolah',
+    label: 'Arsip Digital',
     icon: Archive,
     roles: ['super_admin', 'kepala_sekolah', 'guru', 'tendik', 'supervisor', 'wali_kelas'],
   },
@@ -86,18 +52,6 @@ const NAV_ITEMS: NavConfig[] = [
     label: 'CMS Web Profil',
     icon: Globe,
     roles: ['super_admin', 'tendik'],
-  },
-  {
-    id: 'cms_media',
-    label: 'Kelola Gambar',
-    icon: Image,
-    roles: ['super_admin', 'tendik'],
-  },
-  {
-    id: 'users_audit',
-    label: 'Akun, Backup & Audit',
-    icon: Shield,
-    roles: ['super_admin', 'kepala_sekolah'],
   },
 ];
 
@@ -118,7 +72,7 @@ function SimsShell() {
   } = useAuth();
 
   const [viewMode, setViewMode] = useState<'public' | 'portal'>('public');
-  const [activeSection, setActiveSection] = useState<DashboardSection>('overview');
+  const [activeSection, setActiveSection] = useState<DashboardSection>('archives');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [schoolLogoUrl, setSchoolLogoUrl] = useState('');
 
@@ -184,8 +138,8 @@ function SimsShell() {
 
   if (!authReady) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-        <div className="bg-white border border-slate-200 rounded-xl px-6 py-5 text-sm text-slate-600">
+      <div className="min-h-screen bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-900 flex items-center justify-center p-6">
+        <div className="bg-white/95 backdrop-blur border border-emerald-200/70 rounded-2xl px-6 py-5 text-sm text-emerald-950 shadow-xl">
           Memuat sesi autentikasi SIMS SMA Darul Ulum Kepohbaru...
         </div>
       </div>
@@ -194,8 +148,8 @@ function SimsShell() {
 
   if (!userAccount) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 sm:p-6">
-        <div className="max-w-2xl w-full bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 space-y-6 shadow-sm">
+      <div className="min-h-screen bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-900 flex flex-col items-center justify-center p-4 sm:p-6">
+        <div className="max-w-2xl w-full bg-white/95 backdrop-blur border border-emerald-300/40 rounded-2xl p-6 sm:p-8 space-y-6 shadow-2xl">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <button
               type="button"
@@ -291,8 +245,8 @@ function SimsShell() {
 
   if (userAccount.activeStatus === 'nonaktif') {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-white border border-slate-200 rounded-xl p-8 space-y-4 text-center">
+      <div className="min-h-screen bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-900 flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white/95 backdrop-blur border border-emerald-300/40 rounded-2xl p-8 space-y-4 text-center shadow-2xl">
           <h1 className="text-xl font-editorial font-semibold text-slate-950">
             Akun Dinonaktifkan Sementara
           </h1>
@@ -325,46 +279,34 @@ function SimsShell() {
 
   const renderSection = () => {
     switch (activeSection) {
-      case 'overview':
-        return <DashboardHome onNavigate={setActiveSection} />;
-      case 'parent_portal':
-        return <ParentPortalView />;
-      case 'academic':
-        return <AcademicModule />;
-      case 'attendance':
-        return <AttendanceModule />;
       case 'archives':
         return <ArchiveModule />;
       case 'supervision':
         return <SupervisionModule />;
       case 'cms':
-        return <CmsAdminModule mode="cms" initialCmsTab="profil" />;
-      case 'cms_media':
-        return <CmsAdminModule mode="cms" initialCmsTab="gambar" />;
-      case 'users_audit':
-        return <CmsAdminModule mode="users_audit" />;
+        return <CmsAdminModule />;
       default:
-        return <DashboardHome onNavigate={setActiveSection} />;
+        return <ArchiveModule />;
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50/90 via-green-50/80 to-teal-50/90 flex">
       {/* Mobile Sidebar Backdrop */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-30 bg-slate-950/50 lg:hidden"
+          className="fixed inset-0 z-30 bg-emerald-950/60 backdrop-blur-xs lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar (260px fixed on desktop) */}
       <aside
-        className={`fixed lg:sticky top-0 left-0 z-40 h-screen w-[260px] shrink-0 bg-emerald-950 text-emerald-50 flex flex-col transition-transform lg:translate-x-0 ${
+        className={`fixed lg:sticky top-0 left-0 z-40 h-screen w-[260px] shrink-0 bg-gradient-to-b from-emerald-950 via-emerald-900 to-teal-950 text-emerald-50 flex flex-col shadow-xl transition-transform lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="h-16 px-5 border-b border-emerald-900 flex items-center justify-between gap-2">
+        <div className="h-16 px-5 border-b border-emerald-800/70 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
             {isRenderableImageUrl(schoolLogoUrl) && (
               <img
@@ -404,8 +346,8 @@ function SimsShell() {
                 }}
                 className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
                   active
-                    ? 'bg-emerald-800 text-white font-semibold'
-                    : 'text-emerald-100/80 hover:bg-emerald-900/70 hover:text-white'
+                    ? 'bg-gradient-to-r from-emerald-700 to-teal-700 text-white font-semibold shadow-xs'
+                    : 'text-emerald-100/85 hover:bg-emerald-800/60 hover:text-white'
                 }`}
               >
                 <Icon className="w-4 h-4 shrink-0" />
@@ -437,20 +379,20 @@ function SimsShell() {
 
       {/* Main Workspace */}
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className="sticky top-0 z-20 h-16 bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between gap-4">
+        <header className="sticky top-0 z-20 h-16 bg-gradient-to-r from-white/95 via-emerald-50/90 to-teal-50/90 backdrop-blur border-b border-emerald-200/80 px-4 sm:px-6 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
               onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 rounded-lg text-slate-700 hover:bg-slate-100"
+              className="lg:hidden p-2 rounded-lg text-emerald-900 hover:bg-emerald-100"
               aria-label="Buka menu"
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="text-xs sm:text-sm text-slate-500 truncate">
+            <div className="text-xs sm:text-sm text-emerald-800/80 truncate">
               <span>SIMS</span>
               <span className="mx-1.5">/</span>
-              <span className="font-semibold text-slate-900">{currentNav?.label}</span>
+              <span className="font-semibold text-emerald-950">{currentNav?.label}</span>
             </div>
           </div>
 
@@ -474,20 +416,22 @@ function SimsShell() {
                   const val = e.target.value as UserRole;
                   setPreviewRole(val === 'super_admin' ? null : val);
                 }}
-                className="hidden md:block px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-slate-50 text-slate-800 font-medium"
+                className="hidden md:block px-2.5 py-1.5 text-xs border border-emerald-200 rounded-lg bg-emerald-50/80 text-emerald-950 font-medium"
               >
-                {(Object.keys(ROLE_LABELS) as UserRole[]).map((r) => (
-                  <option key={r} value={r}>
-                    Tampilan: {ROLE_LABELS[r]}
-                  </option>
-                ))}
+                {(['super_admin', 'kepala_sekolah', 'guru', 'tendik', 'supervisor'] as UserRole[]).map(
+                  (r) => (
+                    <option key={r} value={r}>
+                      Tampilan: {ROLE_LABELS[r]}
+                    </option>
+                  )
+                )}
               </select>
             )}
 
             <button
               type="button"
               onClick={logout}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-100 whitespace-nowrap shrink-0"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-900 border border-emerald-200 bg-white/90 rounded-lg hover:bg-emerald-100/70 whitespace-nowrap shrink-0"
             >
               <LogOut className="w-3.5 h-3.5" /> Keluar
             </button>

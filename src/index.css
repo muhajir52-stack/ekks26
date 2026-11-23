@@ -10,7 +10,8 @@
   html {
     font-family: var(--font-sans);
     color: #0f172a;
-    background-color: #f8fafc;
+    background: linear-gradient(150deg, #ecfdf5 0%, #d1fae5 48%, #f0fdfa 100%);
+    background-attachment: fixed;
     scroll-behavior: smooth;
   }
 

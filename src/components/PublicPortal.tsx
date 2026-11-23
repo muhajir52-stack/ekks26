@@ -310,9 +310,9 @@ export function PublicPortal({ onOpenPortal, onQuickLogin, isAuthenticated }: Pu
   const visuals = parseSiteVisuals(contents.site_visuals);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50/95 via-green-50/85 to-teal-50/95 text-slate-900 flex flex-col">
       {/* Top Bar Contract: 3 Zones Separated by gap-8 */}
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200">
+      <header className="sticky top-0 z-30 bg-gradient-to-r from-emerald-50/95 via-white/95 to-teal-50/95 backdrop-blur border-b border-emerald-200/80">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-8">
           <button
             type="button"
@@ -463,23 +463,23 @@ export function PublicPortal({ onOpenPortal, onQuickLogin, isAuthenticated }: Pu
         {activeTab === 'beranda' && (
           <div>
             {/* Hero Section */}
-            <section className="bg-white border-b border-slate-200">
+            <section className="bg-gradient-to-br from-emerald-100/90 via-emerald-50 to-teal-100/80 border-b border-emerald-200">
               <div className="max-w-7xl mx-auto px-6 py-12 lg:py-16 grid lg:grid-cols-12 gap-10 items-stretch">
                 <div className="lg:col-span-7 flex flex-col justify-center space-y-6">
                   <div className="text-xs font-semibold tracking-wider uppercase text-emerald-800">
                     Kepohbaru · Bojonegoro · Jawa Timur · Terakreditasi A
                   </div>
-                  <h1 className="text-3xl sm:text-4xl lg:text-5xl font-editorial font-semibold text-slate-950 leading-tight text-balance">
+                  <h1 className="text-3xl sm:text-4xl lg:text-5xl font-editorial font-semibold text-emerald-950 leading-tight text-balance">
                     Pendidikan Islam Modern Berbasis Mutu, Sains, dan Akhlak Mulia
                   </h1>
-                  <p className="text-base text-slate-600 leading-relaxed max-w-2xl">
+                  <p className="text-base text-slate-700 leading-relaxed max-w-2xl">
                     {contents.profile?.body}
                   </p>
                   <div className="flex flex-wrap items-center gap-4 pt-2">
                     <button
                       type="button"
                       onClick={() => handleNav('ppdb_kontak')}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-800 text-white text-sm font-semibold rounded-lg hover:bg-emerald-900 transition-colors whitespace-nowrap shrink-0"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-800 to-teal-800 text-white text-sm font-semibold rounded-lg hover:from-emerald-900 hover:to-teal-900 shadow-xs transition-colors whitespace-nowrap shrink-0"
                     >
                       Informasi PPDB 2026/2027
                       <ArrowRight className="w-4 h-4" />
@@ -487,7 +487,7 @@ export function PublicPortal({ onOpenPortal, onQuickLogin, isAuthenticated }: Pu
                     <button
                       type="button"
                       onClick={() => handleNav('profil')}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-slate-800 border border-slate-300 text-sm font-semibold rounded-lg hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/95 text-emerald-950 border border-emerald-300 text-sm font-semibold rounded-lg hover:bg-emerald-50 transition-colors whitespace-nowrap shrink-0"
                     >
                       Profil & Visi Misi
                     </button>
@@ -502,23 +502,23 @@ export function PublicPortal({ onOpenPortal, onQuickLogin, isAuthenticated }: Pu
               </div>
 
               {/* 4-Column Institutional Key Metrics Strip */}
-              <div className="border-t border-slate-200 bg-slate-50/70">
+              <div className="border-t border-emerald-800/40 bg-gradient-to-r from-emerald-950 via-emerald-900 to-teal-900 text-white">
                 <div className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-2 lg:grid-cols-4 gap-6">
                   <div>
-                    <div className="text-2xl font-tabular font-bold text-emerald-900">121</div>
-                    <div className="text-xs text-slate-600 mt-0.5">Peserta Didik Aktif · X–XII</div>
+                    <div className="text-2xl font-tabular font-bold text-emerald-300">121</div>
+                    <div className="text-xs text-emerald-100/90 mt-0.5">Peserta Didik Aktif · X–XII</div>
                   </div>
                   <div>
-                    <div className="text-2xl font-tabular font-bold text-emerald-900">18</div>
-                    <div className="text-xs text-slate-600 mt-0.5">Guru & Tenaga Kependidikan</div>
+                    <div className="text-2xl font-tabular font-bold text-emerald-300">18</div>
+                    <div className="text-xs text-emerald-100/90 mt-0.5">Guru & Tenaga Kependidikan</div>
                   </div>
                   <div>
-                    <div className="text-2xl font-tabular font-bold text-emerald-900">A</div>
-                    <div className="text-xs text-slate-600 mt-0.5">Akreditasi BAN-S/M Unggul</div>
+                    <div className="text-2xl font-tabular font-bold text-emerald-300">A</div>
+                    <div className="text-xs text-emerald-100/90 mt-0.5">Akreditasi BAN-S/M Unggul</div>
                   </div>
                   <div>
-                    <div className="text-2xl font-tabular font-bold text-emerald-900">2026</div>
-                    <div className="text-xs text-slate-600 mt-0.5">SIMS & Supervisi Digital Aktif</div>
+                    <div className="text-2xl font-tabular font-bold text-emerald-300">2026</div>
+                    <div className="text-xs text-emerald-100/90 mt-0.5">SIMS & Supervisi Digital Aktif</div>
                   </div>
                 </div>
               </div>
@@ -526,8 +526,8 @@ export function PublicPortal({ onOpenPortal, onQuickLogin, isAuthenticated }: Pu
 
             {/* Sambutan Kepala Sekolah & Pengumuman */}
             <section className="max-w-7xl mx-auto px-6 py-12 grid lg:grid-cols-12 gap-8">
-              <div className="lg:col-span-7 bg-white border border-slate-200 rounded-xl p-8 space-y-5">
-                <div className="text-xs font-medium text-slate-500">
+              <div className="lg:col-span-7 bg-white/95 backdrop-blur border border-emerald-200/85 rounded-2xl p-8 shadow-xs space-y-5">
+                <div className="text-xs font-semibold text-emerald-800">
                   Sambutan Kepala Sekolah · Kepemimpinan Pembelajaran
                 </div>
                 <div className="flex items-start gap-5">
@@ -536,7 +536,7 @@ export function PublicPortal({ onOpenPortal, onQuickLogin, isAuthenticated }: Pu
                     imageUrl={visuals.foto_kepala_sekolah.url}
                   />
                   <div className="space-y-1">
-                    <h2 className="text-2xl font-editorial font-semibold text-slate-900">
+                    <h2 className="text-2xl font-editorial font-semibold text-emerald-950">
                       SALIM, S.Pd., M.Pd
                     </h2>
                     <div className="text-sm text-emerald-800 font-medium">
@@ -552,9 +552,9 @@ export function PublicPortal({ onOpenPortal, onQuickLogin, isAuthenticated }: Pu
                 </p>
               </div>
 
-              <div className="lg:col-span-5 bg-white border border-slate-200 rounded-xl p-8 space-y-5">
+              <div className="lg:col-span-5 bg-white/95 backdrop-blur border border-emerald-200/85 rounded-2xl p-8 shadow-xs space-y-5">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-slate-900">Pengumuman Resmi</h3>
+                  <h3 className="text-lg font-editorial font-semibold text-emerald-950">Pengumuman Resmi</h3>
                   <button
                     type="button"
                     onClick={() => handleNav('kabar')}
@@ -563,10 +563,10 @@ export function PublicPortal({ onOpenPortal, onQuickLogin, isAuthenticated }: Pu
                     Lihat Semua
                   </button>
                 </div>
-                <div className="divide-y divide-slate-200">
+                <div className="divide-y divide-emerald-100">
                   {announcements.slice(0, 3).map((ann) => (
                     <div key={ann.id} className="py-3.5 first:pt-0 last:pb-0 space-y-1">
-                      <div className="text-xs text-slate-500 font-tabular">
+                      <div className="text-xs text-emerald-800/80 font-tabular">
                         {ann.publishedDate} · {ann.priority === 'penting' ? 'Prioritas' : 'Informasi'}
                       </div>
                       <div className="text-sm font-semibold text-slate-900">{ann.title}</div>
@@ -579,9 +579,9 @@ export function PublicPortal({ onOpenPortal, onQuickLogin, isAuthenticated }: Pu
 
             {/* Berita & Agenda Ringkas */}
             <section className="max-w-7xl mx-auto px-6 pb-14 space-y-6">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+              <div className="flex items-center justify-between border-b border-emerald-200 pb-4">
                 <div>
-                  <h2 className="text-2xl font-editorial font-semibold text-slate-900">
+                  <h2 className="text-2xl font-editorial font-semibold text-emerald-950">
                     Berita & Kegiatan Terbaru
                   </h2>
                   <p className="text-sm text-slate-600 mt-1">
@@ -601,7 +601,7 @@ export function PublicPortal({ onOpenPortal, onQuickLogin, isAuthenticated }: Pu
                 {news.slice(0, 3).map((article, idx) => (
                   <article
                     key={article.id}
-                    className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col justify-between space-y-4 hover:border-emerald-700/40 transition-colors"
+                    className="bg-white/95 backdrop-blur border border-emerald-200/85 rounded-2xl p-5 shadow-xs flex flex-col justify-between space-y-4 hover:border-emerald-500/60 transition-colors"
                   >
                     <div className="space-y-4">
                       <EditorialCardVisual
@@ -609,7 +609,7 @@ export function PublicPortal({ onOpenPortal, onQuickLogin, isAuthenticated }: Pu
                         imageUrl={article.imageUrl}
                         alt={article.title}
                       />
-                      <div className="text-xs text-slate-500">
+                      <div className="text-xs text-emerald-800/80">
                         <span>{article.category}</span>
                         <span className="mx-1.5">·</span>
                         <span className="font-tabular">{article.publishedDate}</span>
@@ -717,10 +717,10 @@ export function PublicPortal({ onOpenPortal, onQuickLogin, isAuthenticated }: Pu
             </section>
 
             {/* Direktori Guru & Tendik */}
-            <section className="bg-white border border-slate-200 rounded-xl p-8 space-y-6">
+            <section className="bg-white/95 border border-emerald-200/85 rounded-2xl p-8 shadow-xs space-y-6">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-2xl font-editorial font-semibold text-slate-950">
+                  <h2 className="text-2xl font-editorial font-semibold text-emerald-950">
                     Data Guru & Tenaga Kependidikan
                   </h2>
                   <p className="text-sm text-slate-600 mt-1">
@@ -729,23 +729,23 @@ export function PublicPortal({ onOpenPortal, onQuickLogin, isAuthenticated }: Pu
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="relative">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <Search className="w-4 h-4 text-emerald-700 absolute left-3 top-2.5" />
                     <input
                       type="text"
                       value={dirSearch}
                       onChange={(e) => setDirSearch(e.target.value)}
                       placeholder="Cari nama atau mapel..."
-                      className="pl-9 pr-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-700"
+                      className="pl-9 pr-3 py-1.5 text-sm border border-emerald-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-700"
                     />
                   </div>
-                  <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
+                  <div className="flex items-center gap-1 p-1 bg-emerald-100/75 rounded-lg">
                     {(['semua', 'pimpinan', 'guru', 'tendik'] as const).map((r) => (
                       <button
                         key={r}
                         type="button"
                         onClick={() => setDirFilter(r)}
                         className={`px-3 py-1 text-xs font-medium rounded-md capitalize whitespace-nowrap shrink-0 ${
-                          dirFilter === r ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'
+                          dirFilter === r ? 'bg-emerald-800 text-white shadow-xs' : 'text-emerald-950'
                         }`}
                       >
                         {r}
@@ -755,9 +755,9 @@ export function PublicPortal({ onOpenPortal, onQuickLogin, isAuthenticated }: Pu
                 </div>
               </div>
 
-              <div className="overflow-x-auto border border-slate-200 rounded-lg">
+              <div className="overflow-x-auto border border-emerald-200 rounded-xl">
                 <table className="w-full text-sm text-left">
-                  <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                  <thead className="bg-emerald-50/90 text-emerald-950 border-b border-emerald-200">
                     <tr>
                       <th className="py-3 px-4 font-semibold">Nama Lengkap</th>
                       <th className="py-3 px-4 font-semibold">Jabatan</th>
@@ -765,9 +765,9 @@ export function PublicPortal({ onOpenPortal, onQuickLogin, isAuthenticated }: Pu
                       <th className="py-3 px-4 font-semibold">Pendidikan</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200">
+                  <tbody className="divide-y divide-emerald-100">
                     {filteredDirectory.map((d) => (
-                      <tr key={d.id} className="hover:bg-slate-50">
+                      <tr key={d.id} className="hover:bg-emerald-50/50">
                         <td className="py-3 px-4 font-medium text-slate-900">{d.name}</td>
                         <td className="py-3 px-4 text-slate-700">{d.position}</td>
                         <td className="py-3 px-4 text-slate-600">{d.subject || '-'}</td>
@@ -818,9 +818,9 @@ export function PublicPortal({ onOpenPortal, onQuickLogin, isAuthenticated }: Pu
                   Sebaran rombongan belajar dan peserta didik SMA Darul Ulum Kepohbaru Tahun Pelajaran 2026/2027.
                 </p>
               </div>
-              <div className="overflow-x-auto border border-slate-200 rounded-lg">
+              <div className="overflow-x-auto border border-emerald-200 rounded-xl">
                 <table className="w-full text-sm text-left">
-                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                  <thead className="bg-emerald-50/90 border-b border-emerald-200 text-emerald-950">
                     <tr>
                       <th className="py-3 px-4 font-semibold">Tingkat / Fase</th>
                       <th className="py-3 px-4 font-semibold">Jumlah Rombel</th>
@@ -829,7 +829,7 @@ export function PublicPortal({ onOpenPortal, onQuickLogin, isAuthenticated }: Pu
                       <th className="py-3 px-4 font-semibold text-right">Total Siswa</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200 font-tabular">
+                  <tbody className="divide-y divide-emerald-100 font-tabular">
                     <tr>
                       <td className="py-3 px-4 font-sans font-medium text-slate-900">Kelas X (Fase E)</td>
                       <td className="py-3 px-4">2 Rombel</td>
@@ -1157,13 +1157,13 @@ export function PublicPortal({ onOpenPortal, onQuickLogin, isAuthenticated }: Pu
       </main>
 
       {/* Footer */}
-      <footer className="bg-slate-900 text-slate-300 border-t border-slate-800">
+      <footer className="bg-gradient-to-r from-emerald-950 via-emerald-900 to-teal-950 text-emerald-100 border-t border-emerald-800">
         <div className="max-w-7xl mx-auto px-6 py-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="space-y-1">
             <div className="text-base font-editorial font-semibold text-white">
               SMA Darul Ulum Kepohbaru
             </div>
-            <div className="text-xs text-slate-400">
+            <div className="text-xs text-emerald-200/80">
               Kepohbaru, Kabupaten Bojonegoro, Jawa Timur · Sistem Informasi Manajemen Sekolah Terpadu
             </div>
           </div>
@@ -1181,7 +1181,7 @@ export function PublicPortal({ onOpenPortal, onQuickLogin, isAuthenticated }: Pu
             <button
               type="button"
               onClick={onOpenPortal}
-              className="text-emerald-400 font-semibold hover:text-emerald-300"
+              className="text-emerald-300 font-semibold hover:text-emerald-200"
             >
               Portal SIMS
             </button>

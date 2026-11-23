@@ -12,29 +12,20 @@ import {
 import {
   Award,
   Calendar,
-  CheckCircle2,
-  Clock,
-  Copy,
-  Database,
-  Download,
-  FileJson,
   FileText,
   Image,
   Megaphone,
   Newspaper,
   Plus,
-  RefreshCw,
   RotateCcw,
   Save,
-  Shield,
   Trash2,
   Upload,
   Users,
   X,
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { QUICK_ACCOUNTS, useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 import { logActivity } from '../lib/audit';
 import {
   compressImageFile,
@@ -46,7 +37,6 @@ import {
 } from '../lib/imageUtils';
 import {
   appendQuickActivityLog,
-  DEFAULT_QUICK_ACTIVITY_LOGS,
   loadQuickData,
   loadQuickRecord,
   nextQuickId,
@@ -62,40 +52,18 @@ import {
   DEFAULT_NEWS,
   DEFAULT_PUBLIC_DIRECTORY,
   DEFAULT_PUBLIC_PROFILE,
-  seedInitialDatabase,
 } from '../lib/seedData';
-import {
-  BACKUP_COLLECTION_GROUPS,
-  formatBytes,
-  generateFullSystemBackup,
-  loadDailyBackupHistory,
-  recordDailyBackupHistory,
-  triggerJsonBackupDownload,
-  type DailyBackupHistoryEntry,
-  type FullSystemBackupPayload,
-} from '../lib/backupUtils';
-import { getGasSpreadsheetUrl, isAppsScriptEnvironment } from '../lib/gasBridge';
 import type {
   AcademicEvent,
   Achievement,
-  ActivityLog,
   Announcement,
   GalleryItem,
   NewsArticle,
   PublicDirectoryEntry,
   SchoolContent,
-  UserAccount,
-  UserRole,
 } from '../types/sims';
-import { ROLE_LABELS } from '../types/sims';
-
-interface CmsAdminModuleProps {
-  mode: 'cms' | 'users_audit';
-  initialCmsTab?: CmsTab;
-}
 
 export type CmsTab = 'profil' | 'gambar' | 'berita_pengumuman' | 'kalender_prestasi' | 'direktori';
-type AdminTab = 'users' | 'backup' | 'audit';
 
 const SECTION_KEYS = [
   { key: 'profile', label: 'Profil & Sejarah Sekolah' },
@@ -106,20 +74,11 @@ const SECTION_KEYS = [
   { key: 'contact', label: 'Kontak & Layanan Informasi' },
 ];
 
-export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
+export function CmsAdminModule() {
   const { userAccount, effectiveRole, isQuickSession } = useAuth();
-  const isRealAdmin = userAccount?.role === 'super_admin';
   const canManageCms = effectiveRole === 'super_admin' || effectiveRole === 'tendik';
-  const canViewAudit = effectiveRole === 'super_admin' || effectiveRole === 'kepala_sekolah';
 
-  const [cmsTab, setCmsTab] = useState<CmsTab>(initialCmsTab || 'profil');
-  const [adminTab, setAdminTab] = useState<AdminTab>(isRealAdmin ? 'users' : 'audit');
-
-  useEffect(() => {
-    if (initialCmsTab) {
-      setCmsTab(initialCmsTab);
-    }
-  }, [initialCmsTab]);
+  const [cmsTab, setCmsTab] = useState<CmsTab>('profil');
 
   // CMS State
   const [contentDocs, setContentDocs] = useState<Record<string, SchoolContent>>({});
@@ -159,23 +118,7 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [directory, setDirectory] = useState<PublicDirectoryEntry[]>([]);
 
-  // Users & Audit State
-  const [users, setUsers] = useState<UserAccount[]>([]);
-  const [logs, setLogs] = useState<ActivityLog[]>([]);
-  const [logSearch, setLogSearch] = useState('');
-  const [logModuleFilter, setLogModuleFilter] = useState('semua');
-
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [seeding, setSeeding] = useState(false);
-
-  // Daily Backup State (Super Administrator)
-  const [backupPreview, setBackupPreview] = useState<FullSystemBackupPayload | null>(null);
-  const [loadingBackupPreview, setLoadingBackupPreview] = useState(false);
-  const [downloadingBackup, setDownloadingBackup] = useState(false);
-  const [includeEmbeddedInBackup, setIncludeEmbeddedInBackup] = useState(true);
-  const [backupHistory, setBackupHistory] = useState<DailyBackupHistoryEntry[]>(() =>
-    loadDailyBackupHistory()
-  );
 
   // Forms for CMS lists
   const [newsForm, setNewsForm] = useState({
@@ -234,12 +177,11 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
       }
     };
 
-    if (mode === 'cms') {
-      if (isQuickSession) {
-        const localContent = loadQuickRecord<Record<string, SchoolContent>>(
-          QUICK_KEYS.SCHOOL_CONTENT,
-          {}
-        );
+    if (isQuickSession) {
+      const localContent = loadQuickRecord<Record<string, SchoolContent>>(
+        QUICK_KEYS.SCHOOL_CONTENT,
+        {}
+      );
         const initialContent: Record<string, SchoolContent> = {};
         Object.entries(DEFAULT_PUBLIC_PROFILE).forEach(([k, val]) => {
           initialContent[k] = { id: k, ...val, updatedByUid: 'system' };
@@ -386,59 +328,9 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
           () => {}
         )
       );
-    }
-
-    if (mode === 'users_audit') {
-      if (isQuickSession) {
-        if (isRealAdmin) {
-          const defaultQuickUsers: UserAccount[] = QUICK_ACCOUNTS.map((q) => ({
-            id: q.id,
-            uid: q.uid,
-            email: q.email,
-            displayName: q.displayName,
-            role: q.role,
-            activeStatus: 'aktif',
-          }));
-          setUsers(loadQuickData<UserAccount>('sims_quick_users', defaultQuickUsers));
-        }
-        if (canViewAudit) {
-          setLogs(loadQuickData<ActivityLog>(QUICK_KEYS.ACTIVITY_LOGS, DEFAULT_QUICK_ACTIVITY_LOGS));
-        }
-        return () => unsubs.forEach((u) => u());
-      }
-
-      if (isRealAdmin) {
-        unsubs.push(
-          onSnapshot(
-            collection(db, 'users'),
-            (s) =>
-              setUsers(
-                s.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<UserAccount, 'id'>) }))
-              ),
-            (e) => handleFirestoreError(e, OperationType.LIST, 'users')
-          )
-        );
-      }
-
-      if (canViewAudit) {
-        unsubs.push(
-          onSnapshot(
-            collection(db, 'activity_logs'),
-            (s) => {
-              const list = s.docs.map((d) => ({
-                id: d.id,
-                ...(d.data() as Omit<ActivityLog, 'id'>),
-              }));
-              setLogs(list);
-            },
-            () => {}
-          )
-        );
-      }
-    }
 
     return () => unsubs.forEach((u) => u());
-  }, [mode, isRealAdmin, canViewAudit, isQuickSession]);
+  }, [isQuickSession]);
 
   // Sync editor form when switching sectionKey or when contentDocs loads
   useEffect(() => {
@@ -1157,795 +1049,6 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
     }
   };
 
-  const handleUpdateUserRole = async (targetUser: UserAccount, newRole: UserRole) => {
-    if (!isRealAdmin) return;
-    if (isQuickSession) {
-      const next = users.map((u) => (u.id === targetUser.id ? { ...u, role: newRole } : u));
-      setUsers(next);
-      saveQuickData('sims_quick_users', next);
-      appendQuickActivityLog({
-        actorUid: userAccount?.uid,
-        actorName: userAccount?.displayName || 'Super Admin',
-        actorRole: 'super_admin',
-        action: 'Ubah Peran Pengguna',
-        module: 'Manajemen Akun & RBAC',
-        details: `Peran ${targetUser.email} diubah menjadi ${ROLE_LABELS[newRole]}.`,
-      });
-      showToast(`Peran ${targetUser.displayName} diperbarui ke ${ROLE_LABELS[newRole]}.`);
-      return;
-    }
-
-    try {
-      await updateDoc(doc(db, 'users', targetUser.id), {
-        role: newRole,
-        updatedAt: serverTimestamp(),
-      });
-      await logActivity({
-        actorName: userAccount?.displayName || 'Super Admin',
-        actorRole: 'super_admin',
-        action: 'Ubah Peran Pengguna',
-        module: 'Manajemen Akun & RBAC',
-        details: `Peran ${targetUser.email} diubah menjadi ${ROLE_LABELS[newRole]}.`,
-      });
-      showToast(`Peran ${targetUser.displayName} diperbarui ke ${ROLE_LABELS[newRole]}.`);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `users/${targetUser.id}`);
-    }
-  };
-
-  const handleToggleUserStatus = async (targetUser: UserAccount) => {
-    if (!isRealAdmin) return;
-    const nextStatus: UserAccount['activeStatus'] =
-      targetUser.activeStatus === 'aktif' ? 'nonaktif' : 'aktif';
-    if (isQuickSession) {
-      const next = users.map((u) =>
-        u.id === targetUser.id ? { ...u, activeStatus: nextStatus } : u
-      );
-      setUsers(next);
-      saveQuickData('sims_quick_users', next);
-      appendQuickActivityLog({
-        actorUid: userAccount?.uid,
-        actorName: userAccount?.displayName || 'Super Admin',
-        actorRole: 'super_admin',
-        action: 'Ubah Status Akun',
-        module: 'Manajemen Akun & RBAC',
-        details: `Status akun ${targetUser.email} diubah menjadi ${nextStatus}.`,
-      });
-      showToast(`Status akun ${targetUser.displayName} kini ${nextStatus}.`);
-      return;
-    }
-
-    try {
-      await updateDoc(doc(db, 'users', targetUser.id), {
-        activeStatus: nextStatus,
-        updatedAt: serverTimestamp(),
-      });
-      await logActivity({
-        actorName: userAccount?.displayName || 'Super Admin',
-        actorRole: 'super_admin',
-        action: 'Ubah Status Akun',
-        module: 'Manajemen Akun & RBAC',
-        details: `Status akun ${targetUser.email} diubah menjadi ${nextStatus}.`,
-      });
-      showToast(`Status akun ${targetUser.displayName} kini ${nextStatus}.`);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `users/${targetUser.id}`);
-    }
-  };
-
-  const handleRunSeed = async () => {
-    if (!isRealAdmin) return;
-    setSeeding(true);
-    try {
-      if (isQuickSession) {
-        Object.values(QUICK_KEYS).forEach((key) => {
-          try {
-            localStorage.removeItem(key);
-          } catch {
-            // ignore
-          }
-        });
-        try {
-          localStorage.removeItem('sims_quick_users');
-        } catch {
-          // ignore
-        }
-        const defaultQuickUsers: UserAccount[] = QUICK_ACCOUNTS.map((q) => ({
-          id: q.id,
-          uid: q.uid,
-          email: q.email,
-          displayName: q.displayName,
-          role: q.role,
-          activeStatus: 'aktif',
-        }));
-        setUsers(defaultQuickUsers);
-        setLogs(DEFAULT_QUICK_ACTIVITY_LOGS);
-        appendQuickActivityLog({
-          actorUid: userAccount?.uid,
-          actorName: userAccount?.displayName || 'Super Administrator',
-          actorRole: 'super_admin',
-          action: 'Pemulihan Data Master Lokal',
-          module: 'Sistem Inti',
-          details: 'Memulihkan seluruh data master lokal pada sesi akun langsung.',
-        });
-        showToast('Seluruh data master lokal pada sesi akun langsung telah dipulihkan ke bawaan.');
-        return;
-      }
-      const res = await seedInitialDatabase(userAccount?.displayName || 'Super Administrator');
-      showToast(res.message);
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : 'Gagal memulihkan/mengisi data awal.');
-    } finally {
-      setSeeding(false);
-    }
-  };
-
-  const refreshBackupSummary = async (includeEmbedded = includeEmbeddedInBackup) => {
-    if (!isRealAdmin) return;
-    setLoadingBackupPreview(true);
-    try {
-      const payload = await generateFullSystemBackup({
-        isQuickSession,
-        actorName: userAccount?.displayName || 'Super Administrator',
-        actorEmail: userAccount?.email || 'muhajir52@guru.sma.belajar.id',
-        includeEmbeddedFiles: includeEmbedded,
-      });
-      setBackupPreview(payload);
-    } catch (err) {
-      showToast(
-        err instanceof Error ? err.message : 'Gagal memuat ringkasan data backup sistem.'
-      );
-    } finally {
-      setLoadingBackupPreview(false);
-    }
-  };
-
-  useEffect(() => {
-    if (mode === 'users_audit' && adminTab === 'backup' && isRealAdmin) {
-      refreshBackupSummary(includeEmbeddedInBackup);
-    }
-  }, [mode, adminTab, isRealAdmin, isQuickSession, includeEmbeddedInBackup]);
-
-  const handleDownloadDailyBackup = async () => {
-    if (!isRealAdmin) return;
-    setDownloadingBackup(true);
-    try {
-      const payload = await generateFullSystemBackup({
-        isQuickSession,
-        actorName: userAccount?.displayName || 'Super Administrator',
-        actorEmail: userAccount?.email || 'muhajir52@guru.sma.belajar.id',
-        includeEmbeddedFiles: includeEmbeddedInBackup,
-      });
-      setBackupPreview(payload);
-      const { fileName, sizeBytes } = triggerJsonBackupDownload(payload);
-      const historyEntry: DailyBackupHistoryEntry = {
-        id: nextQuickId('bkp'),
-        date: payload.metadata.exportedDate,
-        timestamp: payload.metadata.exportedAt,
-        fileName,
-        totalRecords: payload.metadata.totalRecords,
-        sizeBytes,
-        sourceMode: payload.metadata.sourceMode,
-        actorName: userAccount?.displayName || 'Super Administrator',
-        includeEmbeddedFiles: includeEmbeddedInBackup,
-      };
-      const nextHistory = recordDailyBackupHistory(historyEntry);
-      setBackupHistory(nextHistory);
-
-      if (isQuickSession) {
-        appendQuickActivityLog({
-          actorUid: userAccount?.uid,
-          actorName: userAccount?.displayName || 'Super Administrator',
-          actorRole: 'super_admin',
-          action: 'Unduh Backup Database Harian (JSON)',
-          module: 'Backup Database',
-          details: `Mengunduh arsip offline ${fileName} (${payload.metadata.totalRecords} data, ${formatBytes(sizeBytes)}).`,
-        });
-        setLogs(loadQuickData<ActivityLog>(QUICK_KEYS.ACTIVITY_LOGS, DEFAULT_QUICK_ACTIVITY_LOGS));
-      } else {
-        await logActivity({
-          actorName: userAccount?.displayName || 'Super Administrator',
-          actorRole: 'super_admin',
-          action: 'Unduh Backup Database Harian (JSON)',
-          module: 'Backup Database',
-          details: `Mengunduh arsip offline ${fileName} (${payload.metadata.totalRecords} data, ${formatBytes(sizeBytes)}).`,
-        });
-      }
-
-      showToast(
-        `Cadangan database harian "${fileName}" (${payload.metadata.totalRecords} entri, ${formatBytes(sizeBytes)}) berhasil diunduh.`
-      );
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Gagal membuat file backup JSON.');
-    } finally {
-      setDownloadingBackup(false);
-    }
-  };
-
-  const handleDownloadAppsScriptAsset = async (fileName: 'Code.gs' | 'index.html') => {
-    try {
-      const res = await fetch(`/appsscript/${fileName}`);
-      if (!res.ok) throw new Error(`Berkas ${fileName} tidak ditemukan.`);
-      const text = await res.text();
-      const mimeType =
-        fileName === 'index.html' ? 'text/html;charset=utf-8' : 'text/plain;charset=utf-8';
-      const blob = new Blob([text], { type: mimeType });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      showToast(`Berkas "${fileName}" (${formatBytes(blob.size)}) berhasil diunduh.`);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : `Gagal mengunduh ${fileName}.`);
-    }
-  };
-
-  const handleCopyAppsScriptAsset = async (fileName: 'Code.gs' | 'index.html') => {
-    try {
-      const res = await fetch(`/appsscript/${fileName}`);
-      if (!res.ok) throw new Error(`Berkas ${fileName} tidak ditemukan.`);
-      const text = await res.text();
-      await navigator.clipboard.writeText(text);
-      showToast(`Seluruh isi "${fileName}" (${formatBytes(text.length)}) disalin ke clipboard.`);
-    } catch (err) {
-      showToast(
-        err instanceof Error
-          ? err.message
-          : `Gagal menyalin ${fileName}. Gunakan tombol Unduh ${fileName}.`
-      );
-    }
-  };
-
-  const handleExportLogsExcel = () => {
-    const rows = filteredLogs.map((l) => ({
-      Aktor: l.actorName,
-      Peran: l.actorRole,
-      Modul: l.module,
-      Aksi: l.action,
-      Rincian: l.details,
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Log Aktivitas');
-    XLSX.writeFile(wb, 'Log_Aktivitas_SIMS_SMADU.xlsx');
-  };
-
-  const filteredLogs = logs.filter((l) => {
-    const matchMod = logModuleFilter === 'semua' || l.module === logModuleFilter;
-    const q = logSearch.trim().toLowerCase();
-    const matchText =
-      !q ||
-      l.actorName.toLowerCase().includes(q) ||
-      l.action.toLowerCase().includes(q) ||
-      l.details.toLowerCase().includes(q);
-    return matchMod && matchText;
-  });
-
-  const uniqueModules = Array.from(new Set(logs.map((l) => l.module)));
-
-  if (mode === 'users_audit') {
-    return (
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-editorial font-semibold text-slate-950">
-              Manajemen Akun, RBAC & Audit Log
-            </h1>
-            <p className="text-sm text-slate-600 mt-1">
-              Pengaturan kewenangan 7 peran pengguna SIMS, riwayat aktivitas sistem, dan pemulihan data awal.
-            </p>
-          </div>
-          {isRealAdmin && (
-            <button
-              type="button"
-              onClick={handleRunSeed}
-              disabled={seeding}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-800 text-white text-xs font-semibold rounded-lg hover:bg-emerald-900 disabled:opacity-60 whitespace-nowrap shrink-0"
-            >
-              <Database className="w-4 h-4" />
-              {seeding ? 'Memproses...' : 'Inisialisasi / Pemulihan Data Master'}
-            </button>
-          )}
-        </div>
-
-        {statusMessage && (
-          <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 text-sm px-4 py-3 rounded-lg">
-            {statusMessage}
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
-          {isRealAdmin && (
-            <>
-              <button
-                type="button"
-                onClick={() => setAdminTab('users')}
-                className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg whitespace-nowrap shrink-0 ${
-                  adminTab === 'users'
-                    ? 'bg-emerald-800 text-white'
-                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                <Users className="w-4 h-4" /> Akun & Hak Akses ({users.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setAdminTab('backup')}
-                className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg whitespace-nowrap shrink-0 ${
-                  adminTab === 'backup'
-                    ? 'bg-emerald-800 text-white'
-                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                <FileJson className="w-4 h-4" /> Backup Database Harian
-              </button>
-            </>
-          )}
-          <button
-            type="button"
-            onClick={() => setAdminTab('audit')}
-            className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg whitespace-nowrap shrink-0 ${
-              adminTab === 'audit'
-                ? 'bg-emerald-800 text-white'
-                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            <Shield className="w-4 h-4" /> Log Aktivitas Sistem ({logs.length})
-          </button>
-        </div>
-
-        {adminTab === 'users' && isRealAdmin && (
-          <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <h2 className="text-base font-semibold text-slate-950">
-                Daftar Akun Pengguna Terdaftar (RBAC 7 Peran)
-              </h2>
-              <span className="text-xs text-slate-500">
-                Setiap pengguna baru via Google Sign-In otomatis masuk sebagai Orang Tua hingga dinaikkan oleh Super Admin.
-              </span>
-            </div>
-
-            <div className="overflow-x-auto border border-slate-200 rounded-lg">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
-                  <tr>
-                    <th className="py-3 px-4 font-semibold">Nama Pengguna</th>
-                    <th className="py-3 px-4 font-semibold">Email Google</th>
-                    <th className="py-3 px-4 font-semibold">Peran RBAC</th>
-                    <th className="py-3 px-4 font-semibold">Status Akun</th>
-                    <th className="py-3 px-4 font-semibold text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {users.map((u) => (
-                    <tr key={u.id} className="hover:bg-slate-50">
-                      <td className="py-3 px-4 font-medium text-slate-900">{u.displayName}</td>
-                      <td className="py-3 px-4 text-slate-600 text-xs font-mono">{u.email}</td>
-                      <td className="py-3 px-4">
-                        <select
-                          value={u.role}
-                          onChange={(e) => handleUpdateUserRole(u, e.target.value as UserRole)}
-                          className="px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white font-medium"
-                        >
-                          {(Object.keys(ROLE_LABELS) as UserRole[]).map((roleKey) => (
-                            <option key={roleKey} value={roleKey}>
-                              {ROLE_LABELS[roleKey]}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span
-                          className={`text-xs font-semibold ${
-                            u.activeStatus === 'aktif' ? 'text-emerald-700' : 'text-red-700'
-                          }`}
-                        >
-                          {u.activeStatus === 'aktif' ? 'Aktif' : 'Nonaktif'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleUserStatus(u)}
-                          disabled={u.uid === userAccount?.uid}
-                          className="px-3 py-1 text-xs font-medium border border-slate-300 rounded-lg hover:bg-slate-100 disabled:opacity-40"
-                        >
-                          {u.activeStatus === 'aktif' ? 'Nonaktifkan' : 'Aktifkan'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {adminTab === 'backup' && isRealAdmin && (() => {
-          const todayStr = new Date().toISOString().slice(0, 10);
-          const todayEntry = backupHistory.find((h) => h.date === todayStr);
-          const estimatedBytes = backupPreview
-            ? new Blob([JSON.stringify(backupPreview, null, 2)]).size
-            : 0;
-
-          return (
-            <div className="space-y-6">
-              {/* Kartu Aksi Utama Backup Harian */}
-              <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-5">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 pb-5">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <FileJson className="w-5 h-5 text-emerald-800" />
-                      <h2 className="text-lg font-editorial font-semibold text-slate-950">
-                        Backup Database Harian (Arsip Offline JSON)
-                      </h2>
-                    </div>
-                    <p className="text-xs text-slate-600 leading-relaxed max-w-2xl">
-                      Unduh seluruh data sistem SIMS SMA Darul Ulum Kepohbaru (23 koleksi: Akademik,
-                      Siswa, Guru, Nilai, Absensi, Arsip Digital, Supervisi 88 Butir, CMS Web, Akun &
-                      Audit Log) dalam satu file JSON terstruktur untuk penyimpanan arsip offline harian.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => refreshBackupSummary(includeEmbeddedInBackup)}
-                      disabled={loadingBackupPreview}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold border border-slate-300 bg-white text-slate-700 rounded-lg hover:bg-slate-50 disabled:opacity-60"
-                    >
-                      <RefreshCw
-                        className={`w-3.5 h-3.5 ${loadingBackupPreview ? 'animate-spin' : ''}`}
-                      />
-                      Muat Ulang Data
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleDownloadDailyBackup}
-                      disabled={downloadingBackup}
-                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-800 text-white text-xs font-semibold rounded-lg hover:bg-emerald-900 disabled:opacity-60 whitespace-nowrap"
-                    >
-                      <Download className="w-4 h-4" />
-                      {downloadingBackup
-                        ? 'Menyiapkan File JSON...'
-                        : `Unduh Backup Harian (.json)`}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Status Backup Hari Ini & Opsi Berkas */}
-                <div className="grid md:grid-cols-3 gap-4">
-                  <div
-                    className={`rounded-xl border p-4 space-y-1 ${
-                      todayEntry
-                        ? 'bg-emerald-50/70 border-emerald-200'
-                        : 'bg-amber-50/80 border-amber-200'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 text-xs font-semibold">
-                      {todayEntry ? (
-                        <>
-                          <CheckCircle2 className="w-4 h-4 text-emerald-700" />
-                          <span className="text-emerald-900">Status Hari Ini ({todayStr}): Terbackup</span>
-                        </>
-                      ) : (
-                        <>
-                          <Clock className="w-4 h-4 text-amber-700" />
-                          <span className="text-amber-900">Status Hari Ini ({todayStr}): Belum Diunduh</span>
-                        </>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-600">
-                      {todayEntry
-                        ? `Terakhir diunduh pukul ${new Date(todayEntry.timestamp).toLocaleTimeString('id-ID', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })} WIB (${formatBytes(todayEntry.sizeBytes)}).`
-                        : 'Disarankan mengunduh file JSON harian secara rutin untuk cadangan arsip sekolah offline.'}
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-1">
-                    <div className="text-xs font-semibold text-slate-600">Total Entri Data Sistem</div>
-                    <div className="text-2xl font-editorial font-semibold font-tabular text-slate-950">
-                      {loadingBackupPreview
-                        ? '...'
-                        : backupPreview?.metadata.totalRecords.toLocaleString('id-ID') || '0'}
-                    </div>
-                    <div className="text-[11px] text-slate-500">
-                      Estimasi ukuran JSON:{' '}
-                      <span className="font-tabular font-semibold text-slate-700">
-                        {loadingBackupPreview ? '...' : formatBytes(estimatedBytes)}
-                      </span>{' '}
-                      · Sumber: {isQuickSession ? 'Sesi Lokal' : 'Cloud Firestore'}
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 flex flex-col justify-between gap-2">
-                    <label className="flex items-start gap-2.5 cursor-pointer text-xs text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={includeEmbeddedInBackup}
-                        onChange={(e) => setIncludeEmbeddedInBackup(e.target.checked)}
-                        className="mt-0.5 rounded border-slate-300 text-emerald-800"
-                      />
-                      <span>
-                        <strong className="block text-slate-900">
-                          Sertakan Lampiran Berkas & Gambar Tersemat
-                        </strong>
-                        Menyertakan dokumen arsip dan foto yang diunggah langsung ke dalam file JSON
-                        (nonaktifkan untuk cadangan struktur ringan).
-                      </span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* Rincian Jumlah Data per Modul */}
-                <div className="space-y-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Cakupan Koleksi Database dalam Cadangan JSON
-                  </h3>
-                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {BACKUP_COLLECTION_GROUPS.map((grp) => (
-                      <div
-                        key={grp.group}
-                        className="border border-slate-200 rounded-lg p-3.5 space-y-2 bg-white"
-                      >
-                        <div className="text-xs font-semibold text-emerald-900 border-b border-slate-100 pb-1.5">
-                          {grp.group}
-                        </div>
-                        <div className="space-y-1">
-                          {grp.keys.map((item) => {
-                            const count = backupPreview?.metadata.collectionCounts[item.key] ?? 0;
-                            return (
-                              <div
-                                key={item.key}
-                                className="flex items-center justify-between text-xs text-slate-600"
-                              >
-                                <span>{item.label}</span>
-                                <span className="font-tabular font-semibold text-slate-900">
-                                  {loadingBackupPreview ? '...' : count}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Riwayat Pengunduhan Backup Harian */}
-              <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-base font-semibold text-slate-950">
-                    Riwayat Pengunduhan Backup Harian
-                  </h3>
-                  <span className="text-xs text-slate-500 font-tabular">
-                    {backupHistory.length} catatan tersimpan
-                  </span>
-                </div>
-                <div className="overflow-x-auto border border-slate-200 rounded-lg">
-                  <table className="w-full text-sm text-left">
-                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
-                      <tr>
-                        <th className="py-2.5 px-4 font-semibold">Tanggal & Waktu</th>
-                        <th className="py-2.5 px-4 font-semibold">Nama File Arsip JSON</th>
-                        <th className="py-2.5 px-4 font-semibold">Sumber Data</th>
-                        <th className="py-2.5 px-4 font-semibold text-right">Total Data</th>
-                        <th className="py-2.5 px-4 font-semibold text-right">Ukuran File</th>
-                        <th className="py-2.5 px-4 font-semibold">Pelaksana</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200">
-                      {backupHistory.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="py-8 text-center text-slate-500 text-xs">
-                            Belum ada riwayat pengunduhan backup harian pada perangkat ini. Klik
-                            "Unduh Backup Harian (.json)" untuk membuat cadangan perdana.
-                          </td>
-                        </tr>
-                      ) : (
-                        backupHistory.map((h) => (
-                          <tr key={h.id} className="hover:bg-slate-50">
-                            <td className="py-2.5 px-4 text-xs font-tabular text-slate-700">
-                              {new Date(h.timestamp).toLocaleString('id-ID')}
-                            </td>
-                            <td className="py-2.5 px-4 text-xs font-mono text-emerald-900">
-                              {h.fileName}
-                            </td>
-                            <td className="py-2.5 px-4 text-xs text-slate-600">{h.sourceMode}</td>
-                            <td className="py-2.5 px-4 text-xs font-tabular font-semibold text-right">
-                              {h.totalRecords.toLocaleString('id-ID')}
-                            </td>
-                            <td className="py-2.5 px-4 text-xs font-tabular text-right text-slate-700">
-                              {formatBytes(h.sizeBytes)}
-                            </td>
-                            <td className="py-2.5 px-4 text-xs text-slate-700">{h.actorName}</td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Kartu Ekspor Paket Google Apps Script (Code.gs & index.html) */}
-              <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 pb-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Database className="w-5 h-5 text-emerald-800" />
-                      <h3 className="text-base font-editorial font-semibold text-slate-950">
-                        Paket Konversi Google Apps Script (Code.gs &amp; index.html)
-                      </h3>
-                    </div>
-                    <p className="text-xs text-slate-600 leading-relaxed max-w-2xl">
-                      Unduh kedua berkas hasil konversi untuk di-deploy sebagai Web App di{' '}
-                      <span className="font-mono text-slate-800">script.google.com</span> dengan
-                      penyimpanan otomatis ke Google Spreadsheet &amp; Google Drive sekolah.
-                    </p>
-                  </div>
-
-                  {!isAppsScriptEnvironment() ? (
-                    <div className="flex flex-wrap items-center gap-2 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleDownloadAppsScriptAsset('Code.gs')}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border border-emerald-700 text-emerald-900 bg-emerald-50 rounded-lg hover:bg-emerald-100"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        Unduh Code.gs
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyAppsScriptAsset('Code.gs')}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border border-slate-300 text-slate-800 bg-white rounded-lg hover:bg-slate-50"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                        Salin Code.gs
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDownloadAppsScriptAsset('index.html')}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-emerald-800 text-white rounded-lg hover:bg-emerald-900"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        Unduh index.html
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyAppsScriptAsset('index.html')}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border border-slate-300 text-slate-800 bg-white rounded-lg hover:bg-slate-50"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                        Salin index.html
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3.5 py-2">
-                      Aplikasi sedang berjalan di Google Apps Script
-                      {getGasSpreadsheetUrl() ? (
-                        <div className="font-mono text-[11px] font-normal text-slate-600 mt-0.5 break-all">
-                          {getGasSpreadsheetUrl()}
-                        </div>
-                      ) : null}
-                    </div>
-                  )}
-                </div>
-
-                <ol className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs text-slate-700">
-                  <li className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1">
-                    <div className="font-semibold text-slate-900">1. Buat Proyek Apps Script</div>
-                    <p className="text-slate-600 leading-relaxed">
-                      Buka script.google.com (atau Google Sheets → Ekstensi → Apps Script) dan buat
-                      proyek baru.
-                    </p>
-                  </li>
-                  <li className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1">
-                    <div className="font-semibold text-slate-900">2. Salin Code.gs</div>
-                    <p className="text-slate-600 leading-relaxed">
-                      Tempelkan isi file <span className="font-mono">Code.gs</span> ke editor
-                      server Apps Script untuk backend Google Sheets.
-                    </p>
-                  </li>
-                  <li className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1">
-                    <div className="font-semibold text-slate-900">3. Buat File index.html</div>
-                    <p className="text-slate-600 leading-relaxed">
-                      Tambah file HTML bernama <span className="font-mono">index</span> lalu tempel
-                      isi <span className="font-mono">index.html</span> (bundel tunggal lengkap).
-                    </p>
-                  </li>
-                  <li className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1">
-                    <div className="font-semibold text-slate-900">4. Deploy Web App</div>
-                    <p className="text-slate-600 leading-relaxed">
-                      Klik Deploy → New deployment → Web app, jalankan fungsi{' '}
-                      <span className="font-mono">setupSimsDatabase</span> sekali untuk menyiapkan
-                      tab Sheet.
-                    </p>
-                  </li>
-                </ol>
-              </div>
-            </div>
-          );
-        })()}
-
-        {(adminTab === 'audit' || !isRealAdmin) && (
-          <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-3">
-                <input
-                  type="text"
-                  value={logSearch}
-                  onChange={(e) => setLogSearch(e.target.value)}
-                  placeholder="Cari aktor, aksi, atau rincian..."
-                  className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg w-64"
-                />
-                <select
-                  value={logModuleFilter}
-                  onChange={(e) => setLogModuleFilter(e.target.value)}
-                  className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white"
-                >
-                  <option value="semua">Semua Modul</option>
-                  {uniqueModules.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <button
-                type="button"
-                onClick={handleExportLogsExcel}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-white border border-slate-300 rounded-lg hover:bg-slate-50 whitespace-nowrap shrink-0"
-              >
-                <Download className="w-3.5 h-3.5" /> Ekspor Log Excel
-              </button>
-            </div>
-
-            <div className="overflow-x-auto border border-slate-200 rounded-lg">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
-                  <tr>
-                    <th className="py-2.5 px-4 font-semibold">Pengguna</th>
-                    <th className="py-2.5 px-4 font-semibold">Peran</th>
-                    <th className="py-2.5 px-4 font-semibold">Modul</th>
-                    <th className="py-2.5 px-4 font-semibold">Aksi</th>
-                    <th className="py-2.5 px-4 font-semibold">Keterangan</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {filteredLogs.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="py-8 text-center text-slate-500">
-                        Belum ada catatan log aktivitas yang sesuai.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredLogs.slice(0, 60).map((l) => (
-                      <tr key={l.id} className="hover:bg-slate-50">
-                        <td className="py-2.5 px-4 font-medium text-slate-900">{l.actorName}</td>
-                        <td className="py-2.5 px-4 text-xs text-slate-600">{l.actorRole}</td>
-                        <td className="py-2.5 px-4 text-xs font-medium text-emerald-900">{l.module}</td>
-                        <td className="py-2.5 px-4 text-xs font-semibold text-slate-800">{l.action}</td>
-                        <td className="py-2.5 px-4 text-xs text-slate-600">{l.details}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
   // CMS Mode
   return (
     <div className="space-y-6">
@@ -1954,7 +1057,7 @@ export function CmsAdminModule({ mode, initialCmsTab }: CmsAdminModuleProps) {
           Manajemen Konten Web Profil Sekolah (CMS)
         </h1>
         <p className="text-sm text-slate-600 mt-1">
-          Kelola seluruh 14 fitur website publik SMA Darul Ulum Kepohbaru secara dinamis tanpa mengubah kode program.
+          Kelola konten website profil publik SMA Darul Ulum Kepohbaru secara dinamis tanpa mengubah kode program.
         </p>
       </div>
 

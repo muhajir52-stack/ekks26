@@ -406,13 +406,4 @@ export interface ActivityLog {
   createdAt?: unknown;
 }
 
-export type DashboardSection =
-  | 'overview'
-  | 'academic'
-  | 'attendance'
-  | 'archives'
-  | 'supervision'
-  | 'cms'
-  | 'cms_media'
-  | 'users_audit'
-  | 'parent_portal';
+export type DashboardSection = 'archives' | 'supervision' | 'cms';
